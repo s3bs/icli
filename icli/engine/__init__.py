@@ -41,6 +41,19 @@ primitives
     - Functions: ``fmtmoney``, ``convert_futures_code``, ``find_nearest``, ``sortLocalSymbol``,
       ``portSort``, ``tradeOrderCmp``, ``boundsByPercentDifference``, ``split_commands``,
       ``convert_time``, ``as_duration``
+
+contracts
+    Contract creation, parsing, and utilities for ib_async contracts.
+    - ``contractForName``: parses text formats ("AAPL", "/ES", "I:SPX", OCC options) into Contract objects
+    - ``nameForContract``: generates readable text descriptions from Contract objects
+    - ``contractFromTypeId``, ``contractFromSymbolDescriptor``: reconstruct contracts from cached keys
+    - ``contractToSymbolDescriptor``: generates unique cache keys for contracts
+    - ``tickFieldsForContract``: returns CSV tick field IDs for market data subscriptions
+    - ``parseContractOptionFields``: extracts option-specific fields (date, strike, right)
+    - ``isset``: checks if IBKR float value is real vs UNSET_DOUBLE sentinel
+    - ``lookupKey``: generates immutable lookup keys for contract caching
+    - ``TradeOrder``, ``FullOrderPlacementRecord``: order result containers
+    - Module-level ``FUT_EXP``: must be set before calling ``contractForName()``
 """
 
 # Convenience re-exports for common usage:
