@@ -173,7 +173,7 @@ class CalculatorTransformer(Transformer):
             if q.bidSize and q.askSize:
                 value = (q.bid + q.ask) / 2
             else:
-                value = q.last if q.last is not None else q.close
+                value = q.last if q.last is not None and q.last == q.last else q.close
         except:
             logger.error("[{}] No value found! Calculation can't continue.", value)
             return None

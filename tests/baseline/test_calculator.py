@@ -245,6 +245,13 @@ class TestStringLookup:
         result = calc.calc("MSFT")
         assert result == Decimal("50.0")
 
+    def test_falls_back_to_close_when_last_is_nan(self):
+        """When last is NaN (IB sends this), fall back to close price."""
+        q = _make_quote(bid=None, ask=None, bidSize=0, askSize=0, last=float('nan'), close=55.0)
+        calc = self._make_calc({"SPY": q})
+        result = calc.calc("SPY")
+        assert result == Decimal("55.0")
+
     def test_uses_last_when_last_is_valid(self):
         """When last is a valid (non-None) value, use it."""
         q = _make_quote(bid=None, ask=None, bidSize=0, askSize=0, last=42.5, close=40.0)
