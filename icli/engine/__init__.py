@@ -20,6 +20,8 @@ technicals
     - ``ATRLive``: ATR adapter for live tick streams (keeps a small price buffer)
     - ``rmsnorm``: RMS normalization helper for EMA score calculations
     - ``RTH_EMA_VWAP``: constant (23,400s = 6.5h Regular Trading Hours)
+    - ``analyze_trend_strength``: multi-timeframe trend direction and strength analysis
+    - ``generate_trend_summary``: human-readable trend summary from EMA data
 
 orders
     Order type factory for ib_async.
@@ -53,7 +55,13 @@ contracts
     - ``isset``: checks if IBKR float value is real vs UNSET_DOUBLE sentinel
     - ``lookupKey``: generates immutable lookup keys for contract caching
     - ``TradeOrder``, ``FullOrderPlacementRecord``: order result containers
+    - ``CompleteTradeNotification``: async event wrapper for order completion
+    - ``getExpirationsFromTradier``: fetches option expirations from Tradier API
     - Module-level ``FUT_EXP``: must be set before calling ``contractForName()``
+
+algobinder
+    WebSocket client for external algo data feed ingestion.
+    - ``AlgoBinder``: connects to external WebSocket, saves results to dot-addressable dict
 """
 
 # Convenience re-exports for common usage:

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime
+import os
 
 import dateutil.parser
+import httpx
 import ib_async
 from cachetools import cached
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from ib_async import (
     Bag,
@@ -556,3 +559,82 @@ def lookupKey(contract):
     logger.error("Your contract doesn't have a symbol? Bad contract: {}", contract)
 
     return None
+
+
+@dataclass(slots=True)
+class CompleteTradeNotification:
+    """A wrapper to hold a Trade object and a notifier we can attach to.
+
+    Used by our automated order placement logic to get updates when an _entire_ order
+    completes so we can continue scaling in or out of the next steps.
+    """
+
+    trade: Trade | None = None
+    event: asyncio.Event = field(default_factory=asyncio.Event)
+
+    async def orderComplete(self):
+        """Wait for the event to trigger then clear it sicne we woke up."""
+        await self.event.wait()
+        self.event.clear()
+
+    def set(self):
+        self.event.set()
+
+
+async def getExpirationsFromTradier(symbol: str):
+    """Fetch option chain expirations and strikes from Tradier.
+
+    I'm tired of IBKR data causing minutes of blocking delays during operations, so let's just use other providers instead.
+    """
+
+    # TODO: should we make `token` a parameter instead?
+    token = os.getenv("TRADIER_KEY")
+    if not token:
+        raise Exception("Tradier Token Needed for Tradier Data Fetching!")
+
+    # https://documentation.tradier.com/brokerage-api/markets/get-options-expirations
+    async with httpx.AsyncClient() as client:
+        got = await client.get(
+            "https://api.tradier.com/v1/markets/options/expirations",
+            params={
+                "symbol": symbol,
+                "includeAllRoots": "true",
+                "strikes": "true",
+                "contractSize": "true",
+                "expirationType": "true",
+            },
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        )
+
+    if not got:
+        return None
+
+    found = got.json()
+
+    # API returns map of {expiration: strikes}
+    #               e.g. {"20240816": [100, 101, 102, 103, 104, ...], ...}
+    result = {}
+
+    # convert returned tradier JSON in to a format compat with how we store IBKR data
+    expirations = found["expirations"]
+
+    if not expirations:
+        return None
+
+    for date in expirations["expiration"]:
+        strikes = date["strikes"]["strike"]
+
+        # fix awful tradier data formats where if only one element exists, it is a scalar and not a list
+        # like all the other fields.
+        if not isinstance(strikes, list):
+            strikes = [strikes]
+
+        # tradier sometimes has bad data where they list only 1-2 strikes for an expiration date?
+        # kinda odd, so just skip those dates entirely.
+        if len(strikes) < 5:
+            continue
+
+        # convert date to IBKR format with no dashes as YYYYMMDD
+        result[date["date"].replace("-", "")] = strikes
+
+    return result

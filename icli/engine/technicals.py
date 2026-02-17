@@ -310,3 +310,132 @@ class TWEMA:
                 rms={k: round(v, 6) for k, v in rms.items()},
             )
         )
+
+
+def analyze_trend_strength(df, ema_col="ema", periods=None):
+    """
+    Analyzes the directional strength of a time series using multiple timeframes.
+
+    Parameters:
+    df: DataFrame with time series data
+    ema_col: name of the EMA column to analyze
+    periods: list of periods to compare (if None, uses all available rows)
+
+    Returns:
+    dict containing trend analysis and strength metrics
+    """
+    if periods is None:
+        # Use all available periods except the last row (current)
+        periods = df.index[1].tolist()
+
+    # Calculate changes from current value
+    current_value = df[ema_col].iloc[0]
+    changes = {
+        period: {
+            "change": current_value - df[ema_col].loc[period],
+            "pct_change": (
+                (current_value - df[ema_col].loc[period]) / df[ema_col].loc[period]
+            )
+            * 100,
+        }
+        for period in periods
+        if not pd.isna(df[ema_col].loc[period])
+    }
+
+    # Calculate trend metrics
+    changes_array = np.array([v["change"] for v in changes.values()])
+
+    # Overall trend strength metrics
+    trend_metrics = {
+        "direction": "UP" if np.mean(changes_array) > 0 else "DOWN",
+        "strength": abs(np.mean(changes_array)),
+        "consistency": np.mean(
+            np.sign(changes_array) == np.sign(np.mean(changes_array))
+        )
+        * 100,
+        # for some reason, mypy is reporting np.polyfit doesn't exist when it clearly does
+        "acceleration": np.polyfit(range(len(changes_array)), changes_array, 1)[0],  # type: ignore
+    }
+
+    # Determine trend phase
+    recent_direction = math.copysign(1, changes_array[:3].mean())  # Nearest 3 periods
+    overall_direction = math.copysign(1, changes_array.mean())
+
+    if recent_direction > 0 and overall_direction > 0:
+        trend_phase = "STRONGLY UP"
+    elif recent_direction < 0 and overall_direction < 0:
+        trend_phase = "STRONGLY DOWN"
+    elif recent_direction > 0 and overall_direction < 0:
+        trend_phase = "TURNING UP"
+    elif recent_direction < 0 and overall_direction > 0:
+        trend_phase = "TURNING DOWN"
+    else:
+        trend_phase = "NEUTRAL"
+
+    # Calculate trend components
+    trend_components = {
+        "short_term": math.copysign(1, changes_array[:3].mean()),  # Nearest 3 periods
+        "medium_term": math.copysign(
+            1, changes_array[: len(changes_array) // 2].mean()
+        ),  # First half
+        "long_term": math.copysign(1, changes_array.mean()),  # All periods
+    }
+
+    return {
+        "trend_phase": trend_phase,
+        "metrics": trend_metrics,
+        "components": trend_components,
+        "changes": changes,
+    }
+
+
+def generate_trend_summary(df, ema_col="ema"):
+    """
+    Generates a human-readable summary of the trend analysis.
+    """
+    analysis = analyze_trend_strength(df, ema_col)
+
+    strength_desc = (
+        "strong"
+        if analysis["metrics"]["strength"] > 1
+        else "moderate"
+        if analysis["metrics"]["strength"] > 0.5
+        else "weak"
+    )
+    consistency_desc = (
+        "consistent"
+        if analysis["metrics"]["consistency"] > 80
+        else "moderately consistent"
+        if analysis["metrics"]["consistency"] > 60
+        else "inconsistent"
+    )
+
+    acceleration_desc = (
+        "accelerating"
+        if analysis["metrics"]["acceleration"] > 0.1
+        else "decelerating"
+        if analysis["metrics"]["acceleration"] < -0.1
+        else "steady"
+    )
+
+    summary = f"The trend is currently in a {analysis['trend_phase']} phase with {strength_desc} momentum. "
+    summary += f"The movement is {consistency_desc} across timeframes and is {acceleration_desc}. "
+
+    # Add component analysis
+    components = []
+    if analysis["components"]["short_term"] > 0:
+        components.append("short-term upward")
+    if analysis["components"]["medium_term"] > 0:
+        components.append("medium-term upward")
+    if analysis["components"]["long_term"] > 0:
+        components.append("long-term upward")
+    if analysis["components"]["short_term"] < 0:
+        components.append("short-term downward")
+    if analysis["components"]["medium_term"] < 0:
+        components.append("medium-term downward")
+    if analysis["components"]["long_term"] < 0:
+        components.append("long-term downward")
+
+    summary += f"The trend shows {', '.join(components)} movement."
+
+    return summary
