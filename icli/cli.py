@@ -39,9 +39,9 @@ from prompt_toolkit.history import FileHistory, ThreadedHistory
 from prompt_toolkit.shortcuts import set_title
 from prompt_toolkit.styles import Style
 
-import icli.awwdio as awwdio
+import icli.engine.audio as awwdio
 import icli.calc
-import icli.orders as orders
+import icli.engine.orders as orders
 
 from . import instrumentdb, utils
 

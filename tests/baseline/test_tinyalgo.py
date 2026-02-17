@@ -5,7 +5,7 @@ The ATR class uses a rolling moving average (RMA) of True Range.
 """
 
 import pytest
-from icli.tinyalgo import ATR, ATRLive
+from icli.engine.technicals import ATR, ATRLive
 
 
 class TestATR:

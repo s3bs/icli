@@ -13,7 +13,7 @@ from loguru import logger
 from mutil.dispatch import DArg
 
 from icli.cmds.base import IOp, command
-from icli.futsexchanges import FUTS_TICK_DETAIL
+from icli.engine.exchanges import FUTS_TICK_DETAIL
 from icli.helpers import *
 
 if TYPE_CHECKING:

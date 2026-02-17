@@ -10,7 +10,7 @@ from decimal import Decimal
 ib_async = pytest.importorskip("ib_async")
 
 from ib_async import Order, TagValue
-from icli.orders import IOrder, CLIOrderType, markOrderNotGuaranteed
+from icli.engine.orders import IOrder, CLIOrderType, markOrderNotGuaranteed
 
 
 class TestOrderBusinessLogic:

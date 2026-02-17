@@ -1,8 +1,33 @@
+"""Exchange and symbol reference data for IBKR futures contracts.
+
+This is a large module (~4500 lines) because it embeds two static reference
+dictionaries. The data is intentionally inline rather than in JSON/YAML so that
+the dataclass types are enforced at import time and IDE navigation works.
+
+Layout (search for ``# ===`` section markers):
+    1. FutureSymbol dataclass            (~line 18)
+    2. generateFuturesMapping()          (~line 28) — dev scraper, not called at import
+    3. FUTS_EXCHANGE dict                (~line 92)  — 500+ entries, the primary API
+    4. addTradingClassToTopLevel()       (~line 2985) — auto-indexes by tradingClass
+    5. FutureDetail dataclass            (~line 3008) — tick-level contract specs
+    6. buildTickDetail()                 (~line 3031) — legacy scraper (source offline)
+    7. FUTS_TICK_DETAIL dict             (~line 3060) — 150 entries with tick/decimal data
+
+Public API:
+    FUTS_EXCHANGE: dict[str, FutureSymbol]     — symbol/tradingClass → exchange metadata
+    FUTS_TICK_DETAIL: dict[str, FutureDetail]   — symbol → tick size, decimals, value-per-tick
+    FutureSymbol, FutureDetail                  — the dataclass types
+    generateFuturesMapping()                    — regenerate FUTS_EXCHANGE from IBKR website
+"""
+from __future__ import annotations
+
 from dataclasses import dataclass
 from decimal import Decimal
 
 
-@dataclass
+# === 1. FutureSymbol — exchange-level contract metadata =====================
+
+@dataclass(slots=True, frozen=True)
 class FutureSymbol:
     symbol: str
     exchange: str
@@ -11,6 +36,8 @@ class FutureSymbol:
     currency: str
     hasOptions: bool
 
+
+# === 2. generateFuturesMapping — dev scraper (not called at import) =========
 
 def generateFuturesMapping() -> dict[str, FutureSymbol]:
     """Generate mapping of:
@@ -73,7 +100,9 @@ def generateFuturesMapping() -> dict[str, FutureSymbol]:
     return fs
 
 
-# simple mapping from name of future to exchange for future.
+# === 3. FUTS_EXCHANGE — primary symbol→exchange lookup (500+ entries) =======
+#
+# Simple mapping from name of future to exchange for future.
 # Used for generating ibkr api Future Contract specification since
 # each symbol must have an exchange declared.
 FUTS_EXCHANGE = {
@@ -2966,7 +2995,7 @@ FUTS_EXCHANGE = {
     for sym in "ECBTC ECCL ECNG ECES ECNQ ECRTY ECYM EC6E ECGC ECSI ECHG".split()
 }
 
-## Seconday helper where we also add mappings for FUTS_EXCHANGE[tradingClass] => mapping.
+# === 4. addTradingClassToTopLevel — auto-index by tradingClass ==============
 
 
 def addTradingClassToTopLevel():
@@ -2990,12 +3019,10 @@ def addTradingClassToTopLevel():
 
 FUTS_EXCHANGE |= addTradingClassToTopLevel()
 
-# We have ANOTHER dataset for _different_ futures details.
-# The above FUTS_EXCHANGE is the official IBKR symbol to exchange mapping, but we also have some extra
-# data we may want to use for showing users various details too.
 
+# === 5. FutureDetail — tick-level contract specifications ===================
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class FutureDetail:
     symbol: str
     exchange: str
@@ -3018,6 +3045,8 @@ class FutureDetail:
     # string representing currency value per 'tick' change.
     valuePerTick: str
 
+
+# === 6. buildTickDetail — legacy scraper (data source offline) ==============
 
 def buildTickDetail():
     import pandas as pd
@@ -3046,8 +3075,10 @@ def buildTickDetail():
     return syms
 
 
-# Note: these are from an EXTERNAL data source, so these symbol names do not _necessarily_ correlate to
-#       matching IBKR symbol names, but it's a start.
+# === 7. FUTS_TICK_DETAIL — tick specs per contract (150 entries) ============
+#
+# Note: these are from an EXTERNAL data source, so these symbol names do not
+# _necessarily_ correlate to matching IBKR symbol names, but it's a start.
 FUTS_TICK_DETAIL = {
     "6A": FutureDetail(
         symbol="6A",

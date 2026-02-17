@@ -1,4 +1,6 @@
-"""Common order types with reusable parameter configurations."""
+"""Order type factory — constructs ib_async Order objects for all supported IBKR order types."""
+
+from __future__ import annotations
 
 import enum
 from collections.abc import Mapping
@@ -38,7 +40,8 @@ class IOrder:
 
     action: Literal["BUY", "SELL"]
 
-    qty: float
+    # float for share/contract quantity; str for cash quantity (e.g. "$5000")
+    qty: float | str
 
     # basic limit price
     lmt: Decimal | float | None = 0.00
@@ -235,7 +238,7 @@ class IOrder:
 
         return None
 
-    def adjustForCashQuantity(self, o):
+    def adjustForCashQuantity(self, o: Order) -> Order:
         """Check if we need to use cash instead of direct quantity.
 
         IBKR API allows order size as cash value optionally for some instruments.
@@ -247,6 +250,8 @@ class IOrder:
             cashqty = float(self.qty[1:])
             o.totalQuantity = 0
             o.cashQty = cashqty
+
+        return o
 
     def commonArgs(self, override: dict[str, Any] | None = None) -> dict[str, Any]:
         common = dict(
@@ -706,7 +711,7 @@ class CLIOrderType(Enum):
     PEGBEST = "PEGBEST"
 
 
-def markOrderNotGuaranteed(order: Order):
+def markOrderNotGuaranteed(order: Order) -> None:
     """Add the "NonGuaranteed" tag to order for a spread so it can execute legs individually (may involve partial/incomplete execution)."""
     order.smartComboRoutingParams.append(TagValue("NonGuaranteed", "1"))
 

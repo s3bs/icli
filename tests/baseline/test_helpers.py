@@ -17,20 +17,22 @@ pytestmark = pytest.mark.skipif(
 )
 
 # But we also need to handle the import itself failing
+from icli.engine.primitives import (
+    FillReport,
+    ALGOMAP,
+    FUTS_MONTH_MAPPING,
+    convert_futures_code,
+    boundsByPercentDifference,
+    convert_time,
+    as_duration,
+    split_commands,
+    sortLocalSymbol,
+)
+from icli.engine.technicals import TWEMA
+
+# isset depends on ib_async — still lives in helpers.py
 try:
-    from icli.helpers import (
-        FillReport,
-        ALGOMAP,
-        FUTS_MONTH_MAPPING,
-        convert_futures_code,
-        boundsByPercentDifference,
-        convert_time,
-        as_duration,
-        split_commands,
-        isset,
-        sortLocalSymbol,
-        TWEMA,
-    )
+    from icli.helpers import isset
 except SyntaxError:
     pytest.skip("helpers.py requires Python 3.12+", allow_module_level=True)
 
@@ -242,7 +244,7 @@ class TestALGOMAPCompleteness:
         """Duplicate aliases would silently shadow each other."""
         # ALGOMAP is a dict so dupes are impossible at runtime,
         # but we can check that all values are valid IBKR names
-        from icli.orders import IOrder
+        from icli.engine.orders import IOrder
         io = IOrder(action="BUY", qty=100, lmt=Decimal("150"), aux=Decimal("145"),
                     trailStopPrice=Decimal("148"), trailingPercent=Decimal("0"))
         valid_types = set()

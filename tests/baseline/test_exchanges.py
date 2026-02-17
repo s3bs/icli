@@ -1,7 +1,7 @@
 """Characterisation tests for futsexchanges.py — futures exchange mappings."""
 
 import pytest
-from icli.futsexchanges import FUTS_EXCHANGE, FutureSymbol
+from icli.engine.exchanges import FUTS_EXCHANGE, FutureSymbol
 
 
 class TestFutsExchange:
