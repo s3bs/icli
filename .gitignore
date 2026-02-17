@@ -9,3 +9,4 @@ icli/hist/
 *.json
 *.txt
 poetry.lock
+__pycache__/

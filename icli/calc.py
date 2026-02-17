@@ -61,7 +61,7 @@ class CalculatorTransformer(Transformer):
     }
 
     def abs(self, v):
-        return abs(v)
+        return abs(v[0])
 
     def round(self, value):
         """Convert current value to a rounded integer"""
@@ -173,7 +173,7 @@ class CalculatorTransformer(Transformer):
             if q.bidSize and q.askSize:
                 value = (q.bid + q.ask) / 2
             else:
-                value = q.last if q.last == q.last else q.close
+                value = q.last if q.last is not None else q.close
         except:
             logger.error("[{}] No value found! Calculation can't continue.", value)
             return None
@@ -216,7 +216,7 @@ class CalculatorTransformer(Transformer):
 
     def div(self, numbers):
         """(/ a b c ...)"""
-        if numbers[1:] == 0:
+        if 0 in numbers[1:]:
             return Decimal("NaN")
 
         result = numbers[0]
