@@ -4,6 +4,7 @@ Category: Portfolio
 """
 
 from dataclasses import dataclass, field
+from collections.abc import Hashable, Sequence
 from typing import TYPE_CHECKING
 
 from ib_async import (
@@ -14,7 +15,6 @@ from mutil.dispatch import DArg
 from mutil.frame import printFrame
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
 
 if TYPE_CHECKING:
     pass

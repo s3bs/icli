@@ -4,7 +4,7 @@ Category: Portfolio
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ib_async import (
     FuturesOption,
@@ -17,7 +17,7 @@ from mutil.frame import printFrame
 from mutil.numeric import fmtPrice
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
+from icli.engine.contracts import isset, nameForContract
 
 if TYPE_CHECKING:
     pass

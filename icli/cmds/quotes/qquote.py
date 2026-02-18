@@ -11,7 +11,7 @@ from mutil.dispatch import DArg
 from mutil.frame import printFrame
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
+from icli.engine.contracts import contractForName, tickFieldsForContract
 
 if TYPE_CHECKING:
     pass

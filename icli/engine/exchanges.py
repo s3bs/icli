@@ -10,8 +10,7 @@ Layout (search for ``# ===`` section markers):
     3. FUTS_EXCHANGE dict                (~line 92)  — 500+ entries, the primary API
     4. addTradingClassToTopLevel()       (~line 2985) — auto-indexes by tradingClass
     5. FutureDetail dataclass            (~line 3008) — tick-level contract specs
-    6. buildTickDetail()                 (~line 3031) — legacy scraper (source offline)
-    7. FUTS_TICK_DETAIL dict             (~line 3060) — 150 entries with tick/decimal data
+    6. FUTS_TICK_DETAIL dict             (~line 3031) — 150 entries with tick/decimal data
 
 Public API:
     FUTS_EXCHANGE: dict[str, FutureSymbol]     — symbol/tradingClass → exchange metadata
@@ -3044,35 +3043,6 @@ class FutureDetail:
 
     # string representing currency value per 'tick' change.
     valuePerTick: str
-
-
-# === 6. buildTickDetail — legacy scraper (data source offline) ==============
-
-def buildTickDetail():
-    import pandas as pd
-
-    # uh, this provider changed their URL or went out of business or something. This no longer works.
-    # We could find another data service and adapt their table formats to this extractor eventually.
-    df = pd.read_html("https://futuresonline.com/education/products/specifications/")
-    syms = {}
-
-    # first row is their futures symbol to month mapping table, so skip it
-    for table in df[1:]:
-        for idx, row in table.iterrows():
-            digits = Decimal(row.Tick.split()[0])
-            valuePerTick = row.Tick.split()[-1]
-            syms[row.Symbol] = FutureDetail(
-                symbol=row.Symbol,
-                name=row.Name,
-                tick=digits,
-                decimals=-digits.as_tuple().exponent,  # type: ignore
-                valuePerTick=valuePerTick,
-                months=row.Months,
-                exchange=row.Exchange,
-                size=row.Size,
-            )
-
-    return syms
 
 
 # === 7. FUTS_TICK_DETAIL — tick specs per contract (150 entries) ============

@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
 
 if TYPE_CHECKING:
     pass

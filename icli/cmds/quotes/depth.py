@@ -15,7 +15,6 @@ from mutil.dispatch import DArg
 from mutil.frame import printFrame
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
 
 if TYPE_CHECKING:
     pass

@@ -13,7 +13,7 @@ from icli.cmds.base import IOp, command
 from icli.cmds.utils import (
     expand_symbols,
 )
-from icli.helpers import *
+from icli.engine.contracts import contractForName
 
 if TYPE_CHECKING:
     pass

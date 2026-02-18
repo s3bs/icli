@@ -4,7 +4,7 @@ Category: Portfolio
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ib_async import (
     Bag,
@@ -20,7 +20,7 @@ from icli.cmds.base import IOp, command
 from icli.cmds.utils import (
     addRowSafe,
 )
-from icli.helpers import *
+from icli.engine.contracts import isset, nameForContract, parseContractOptionFields
 
 if TYPE_CHECKING:
     pass

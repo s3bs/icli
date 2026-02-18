@@ -13,7 +13,6 @@ from loguru import logger
 from mutil.dispatch import DArg
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
 
 if TYPE_CHECKING:
     pass

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from mutil.dispatch import DArg
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
 
 if TYPE_CHECKING:
     pass

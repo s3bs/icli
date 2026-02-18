@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
 
 if TYPE_CHECKING:
     pass

@@ -16,9 +16,9 @@ Note: the capture preview is a couple years old at this point and we should make
 
 Welcome to `icli`! You can use `icli` to manage manual and automated trading using your IBKR account for stocks, futures, currencies, and options.
 
-You can enable audio announcements of trade events if you also run [awwdio](https://github.com/mattsta/awwdio) and provide your `awwdio` address as an environment variable like `ICLI_AWWDIO_URL=http://127.0.0.1:8000 poetry run icli` (macOS only currently and you need to manually install the system speech voice packs in system settings).
+You can enable audio announcements of trade events if you also run [awwdio](https://github.com/mattsta/awwdio) and provide your `awwdio` address as an environment variable like `ICLI_AWWDIO_URL=http://127.0.0.1:8000 uv run icli` (macOS only currently and you need to manually install the system speech voice packs in system settings).
 
-You can run multiple clients in different terminal windows using unique client ids for each session like `ICLI_CLIENT_ID=4 poetry run icli`. Note: IBKR restricts orders per-client-id, so for example if you place an order under client id 4, the order will not show up under other clients.
+You can run multiple clients in different terminal windows using unique client ids for each session like `ICLI_CLIENT_ID=4 uv run icli`. Note: IBKR restricts orders per-client-id, so for example if you place an order under client id 4, the order will not show up under other clients.
 
 The full features of `icli` are exposed as individual commands which aren't all documented here in the README. Use the `?` command to see all available commands to you at runtime then use `cmdname?` for documentation per-command.
 
@@ -206,7 +206,7 @@ git clone https://github.com/mattsta/icli
 Create your local environment:
 
 ```bash
-poetry install
+uv sync
 ```
 
 Even though you are logged in to the gateway, the IBKR API still requires your account ID for some actions (because IBKR allows multiple account management, so even if you are logged in as you, it needs to know which account you _really_ want to modify).
@@ -226,7 +226,7 @@ Even though you are logged in to the gateway, the IBKR API still requires your a
 Configure environment settings as above, confirm the IBKR Gateway is started (and confirm whether you want read-only mode or full mode in addition to noting which port the gateway is opening for local connections), login to the IBKR Gateway (requires 2fa to the IBKR app on your phone), then run:
 
 ```bash
-ICLI_IBKR_PORT=[gateway localhost port] poetry run icli
+ICLI_IBKR_PORT=[gateway localhost port] uv run icli
 ```
 
 You should see your account details showing in the large bottom toolbar along with a default set of quotes (assuming you have all the streaming market data permissions required).
@@ -288,7 +288,7 @@ You should also be comfortable diving into the code if anything looks wonky to y
 
 Entry point for the CLI is [`__main__.py`](icli/__main__.py) which handles the event loop setup, environment variable reading, and app launching.
 
-The easiest way to launch the cli is via poetry in the repository directory: `poetry run icli`
+The easiest way to launch the cli is via uv in the repository directory: `uv run icli`
 
 cli commands are processed in a prompt-toolkit loop managed by the somewhat too long `dorepl()` method of class `IBKRCmdlineApp` in [`cli.py`](icli/cli.py).
 

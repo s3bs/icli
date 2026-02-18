@@ -11,7 +11,8 @@ from mutil.dispatch import DArg
 from questionary import Choice
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
+from icli.engine.primitives import tradeOrderCmp
+from icli.helpers import CB
 
 if TYPE_CHECKING:
     pass

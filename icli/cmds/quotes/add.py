@@ -12,7 +12,6 @@ from icli.cmds.base import IOp, command
 from icli.cmds.utils import (
     expand_symbols,
 )
-from icli.helpers import *
 
 if TYPE_CHECKING:
     pass

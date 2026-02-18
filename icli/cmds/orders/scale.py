@@ -10,8 +10,10 @@ from typing import TYPE_CHECKING
 from loguru import logger
 from mutil.dispatch import DArg
 
+from typing import Final
+
 from icli.cmds.base import IOp, command
-from icli.helpers import *
+from icli.engine.contracts import nameForContract
 
 if TYPE_CHECKING:
     pass

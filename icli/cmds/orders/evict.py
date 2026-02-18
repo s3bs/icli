@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ib_async import (
+    Future,
     FuturesOption,
     Option,
 )
@@ -14,7 +15,7 @@ from loguru import logger
 from mutil.dispatch import DArg
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
+from icli.engine.contracts import lookupKey
 
 if TYPE_CHECKING:
     pass

@@ -13,7 +13,8 @@ from mutil.numeric import fmtPrice
 from questionary import Choice
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
+from icli.engine.primitives import tradeOrderCmp
+from icli.helpers import Q
 
 if TYPE_CHECKING:
     pass

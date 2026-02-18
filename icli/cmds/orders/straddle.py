@@ -3,15 +3,22 @@
 Category: Order Management
 """
 
+import bisect
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
+from ib_async import (
+    Future,
+    Index,
+    Stock,
+)
 from loguru import logger
 from mutil.dispatch import DArg
 from mutil.numeric import roundnear
 
 from icli.cmds.base import IOp, command
-from icli.helpers import *
+from icli.engine.contracts import contractForName, lookupKey
+from icli.engine.primitives import find_nearest
 
 if TYPE_CHECKING:
     pass
