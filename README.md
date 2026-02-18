@@ -179,6 +179,34 @@ Finally, option spreads show last because they are multi-line displays showing e
 
 The overall sort is controlled via `cli.py:sortQuotes()`
 
+#### Status Bar
+
+The first line of the toolbar is a status bar showing account state, market circuit breakers, and session counters:
+
+```
+[0] 2026-02-18T05:10:39.426954-05:00[US/Eastern] [89]          7%: 6,395.53 (450.50; 7.04%)   13%: 6,055.95 (790.08; 13.05%)   20%: 5,702.68 (1,143.35; 20.05%)          open orders: 0    positions: 0    executions: 0      mktclose: 10 hours 49 minutes 20.57 seconds   (dim: 7 :: diy: 219)
+```
+
+| Field | Example | Description |
+|-------|---------|-------------|
+| Client ID | `[0]` | IBKR API client ID. Client 0 is special: it can modify orders created by any client. |
+| Timestamp | `2026-02-18T05:10:39...` | Current time in US/Eastern with full timezone info. |
+| Refresh count | `[89]` | Number of toolbar redraws since startup. If a reconnect has occurred, shows `[total; since_reconnect]` so you know how much client-side history (EMAs, etc.) has accumulated since the last data reset. |
+| Circuit breakers | `7%: 6,395.53 (450.50; 7.04%)` | SPX market-wide circuit breaker levels. Calculated from the previous SPX close. The three levels are **7%** (Level 1: 15 min halt), **13%** (Level 2: 15 min halt), and **20%** (Level 3: market closes for the day). Each shows: the trigger price, how many points SPX is currently above that trigger, and the current cushion as a percentage. |
+| Open orders | `open orders: 0` | Count of active/pending orders (from `ib.openTrades()`). |
+| Positions | `positions: 0` | Count of open positions in the account (from `ib.portfolio()`). |
+| Executions | `executions: 0` | Number of fills/executions for the current trading day (from `ib.fills()`). |
+| Market close | `mktclose: 10 hours 49 minutes...` | Countdown to the next equity RTH close (normally 4:00 PM ET, 1:00 PM on early-close days). Always counts down to the next close even outside market hours (e.g. at 5:10 AM it shows ~10h49m until 4:00 PM). |
+| Trading days in month | `dim: 7` | Remaining trading days in the current month. |
+| Trading days in year | `diy: 219` | Remaining trading days in the current year. |
+
+Additional conditional fields that appear when relevant:
+
+- **Overnight margin call**: If your SMA balance is negative, a warning like `(OVERNIGHT REG-T MARGIN CALL: $X,XXX.XX)` appears after the timestamp.
+- **Overnight margin increase**: If full (overnight) maintenance margin exceeds day margin, shows `(OVERNIGHT MARGIN LARGER THAN DAY: $X,XXX.XX (+$X,XXX.XX))`.
+
+Below the status bar, the toolbar shows live quote rows (documented above), followed by account balance fields (AvailableFunds, BuyingPower, Cushion, DailyPnL, etc.) arranged in columns sized to your terminal width.
+
 ## How to Login
 
 IBKR only exposes their trade API via a gateway application (Gateway or TWS) which proxies requests between your API consumer applications and the IBKR upstream API itself.
@@ -209,10 +237,11 @@ Create your local environment:
 uv sync
 ```
 
-Even though you are logged in to the gateway, the IBKR API still requires your account ID for some actions (because IBKR allows multiple account management, so even if you are logged in as you, it needs to know which account you _really_ want to modify).
+Even though you are logged in to the gateway, the IBKR API needs to know which account to operate on (because IBKR allows multiple account management).
 
-- Configure your IBKR account id as environment variable or in `.env.icli` as:
+- Optionally configure your IBKR account id as environment variable or in `.env.icli` as:
   - `ICLI_IBKR_ACCOUNT_ID="U..."`
+  - If not set, `icli` will query the gateway for available accounts on startup. If only one account exists, it auto-selects. If multiple accounts are available, you'll be prompted to choose.
 
 - You can also configure the gateway host and port to connect to using:
   - `ICLI_IBKR_HOST="127.0.0.1"`

@@ -17,15 +17,20 @@ class PortfolioQueries:
 
     Dependencies injected at construction:
     - ib: IB connection
+    - app: reference to IBKRCmdlineApp (provides live accountId)
     - conIdCache: contract ID cache
     - idb: instrument database
     """
 
-    def __init__(self, ib, accountId: str, conIdCache, idb):
+    def __init__(self, ib, app, conIdCache, idb):
         self.ib = ib
-        self.accountId = accountId
+        self._app = app
         self.conIdCache = conIdCache
         self.idb = idb
+
+    @property
+    def accountId(self) -> str:
+        return self._app.accountId
 
     @property
     def positionsDB(self) -> dict[int, Position]:

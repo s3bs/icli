@@ -30,6 +30,9 @@ class AwwdioClient:
     async def say(
         self, voice: str = "Alex", say: str = "Hello World", speed: int = 250, **kwargs: object
     ) -> None:
+        if not self.url:
+            return
+
         try:
             await self.client.get(
                 f"{self.url}/say",
@@ -49,6 +52,9 @@ class AwwdioClient:
                 self.errorHistory[say] = now
 
     async def sound(self, sound: str = "blip") -> None:
+        if not self.url:
+            return
+
         try:
             await self.client.get(f"{self.url}/play", params=dict(sound=sound))
         except Exception:

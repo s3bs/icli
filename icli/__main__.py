@@ -25,13 +25,7 @@ CONFIG_DEFAULT = dict(
 # populate config with defaults if they aren't in the environment
 CONFIG = {**CONFIG_DEFAULT, **os.environ}
 
-try:
-    ACCOUNT_ID: str = CONFIG["ICLI_IBKR_ACCOUNT_ID"]  # type: ignore
-except:
-    logger.error(
-        "Sorry, please provide your IBKR Account ID [U...] in ICLI_IBKR_ACCOUNT_ID"
-    )
-    sys.exit(0)
+ACCOUNT_ID: str = CONFIG.get("ICLI_IBKR_ACCOUNT_ID", "")  # type: ignore
 
 HOST: str = CONFIG["ICLI_IBKR_HOST"]  # type: ignore
 PORT = int(CONFIG["ICLI_IBKR_PORT"])  # type: ignore

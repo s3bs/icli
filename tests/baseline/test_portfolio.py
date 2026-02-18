@@ -23,6 +23,11 @@ class MockIDB:
         return Decimal(str(price))
 
 
+class MockApp:
+    """Minimal mock for IBKRCmdlineApp providing accountId."""
+    accountId = "DU1234567"
+
+
 @pytest.fixture
 def portfolio():
     ib = FakeIB()
@@ -31,11 +36,10 @@ def portfolio():
     ib.add_position("SPY", -50, 582.30)
     ib.add_position("MSFT", 200, 415.20)
 
-    import diskcache
     conIdCache = {}  # Simple dict for tests
     idb = MockIDB()
 
-    return PortfolioQueries(ib, "DU1234567", conIdCache, idb)
+    return PortfolioQueries(ib, MockApp(), conIdCache, idb)
 
 
 class TestPositionsDB:

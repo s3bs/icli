@@ -14,7 +14,7 @@ import pathlib
 import re
 import sys
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Final, Literal
@@ -49,6 +49,7 @@ import tradeapis.ifthen_templates as ifthen_templates
 import tradeapis.orderlang as orderlang
 from ib_async import (
     IB,
+    IBDefaults,
     Bag,
     ComboLeg,
     Contract,
@@ -59,6 +60,7 @@ from ib_async import (
     Order,
     PnLSingle,
     Position,
+    Stock,
     Ticker,
     Trade,
 )
@@ -198,8 +200,8 @@ futures = [
 
 @dataclass(slots=True)
 class IBKRCmdlineApp:
-    # Your IBKR Account ID (required)
-    accountId: str
+    # Your IBKR Account ID (auto-discovered if not provided)
+    accountId: str = ""
 
     # number of seconds between refreshing the toolbar quote/balance views
     # (more frequent updates requires higher CPU utilization for the faster redrawing)
@@ -344,6 +346,14 @@ class IBKRCmdlineApp:
 
     opstate: Any = field(init=False)
 
+    # Engine modules (initialized in __post_init__ via lazy imports)
+    portfolio: Any = field(init=False)
+    qualifier: Any = field(init=False)
+    quotemanager: Any = field(init=False)
+    events: Any = field(init=False)
+    placer: Any = field(init=False)
+    toolbar: Any = field(init=False)
+
     def algobinderStart(self) -> bool:
         """Returns True if we started the algobinder.
         Returns False if algobinder was already running.
@@ -435,7 +445,7 @@ class IBKRCmdlineApp:
         self.idb = instrumentdb.IInstrumentDatabase(self)
 
         from icli.engine.portfolio import PortfolioQueries
-        self.portfolio = PortfolioQueries(self.ib, self.accountId, self.conIdCache, self.idb)
+        self.portfolio = PortfolioQueries(self.ib, self, self.conIdCache, self.idb)
 
         from icli.engine.qualification import ContractQualifier
         self.qualifier = ContractQualifier(self.ib, self.conIdCache, self.quoteState, self.ol)
@@ -1288,12 +1298,84 @@ class IBKRCmdlineApp:
 
         return runnables
 
+    @staticmethod
+    async def _checkIbAsyncRemote() -> tuple[str, str, int] | None:
+        """Fetch latest ib_async info from GitHub.
+
+        Returns (remote_version, head_sha, commits_ahead) or None on failure.
+        commits_ahead is the number of commits on main after the installed version's
+        release commit (0 means up-to-date, >0 means behind).
+        """
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                headers = {"Accept": "application/vnd.github.v3+json"}
+
+                # Fetch latest commits on main
+                r = await client.get(
+                    "https://api.github.com/repos/ib-api-reloaded/ib_async/commits",
+                    params={"per_page": 50},
+                    headers=headers,
+                )
+                if r.status_code != 200:
+                    return None
+
+                commits = r.json()
+                head_sha = commits[0]["sha"]
+
+                # Fetch remote version from pyproject.toml
+                r2 = await client.get(
+                    "https://raw.githubusercontent.com/ib-api-reloaded/ib_async/main/pyproject.toml",
+                )
+                remote_version = ""
+                if r2.status_code == 200:
+                    for line in r2.text.splitlines():
+                        if line.strip().startswith("version"):
+                            remote_version = line.split("=", 1)[1].strip().strip('"')
+                            break
+
+                # Count how many commits HEAD is ahead of the installed version's
+                # release commit (search for "New release: <version>" pattern)
+                local_version = ib_async.version.__version__
+                commits_ahead = 0
+                for i, c in enumerate(commits):
+                    msg = c["commit"]["message"]
+                    if local_version in msg:
+                        commits_ahead = i
+                        break
+                else:
+                    # Release commit not found in recent history — probably far behind
+                    commits_ahead = len(commits)
+
+                return (remote_version, head_sha, commits_ahead)
+        except Exception:
+            return None
+
     async def runall(self):
-        logger.info(
-            "Using ib_async version: {} :: {}",
-            ib_async.version.__version__,
-            ib_async.version.__version_info__,
-        )
+        local_version = ib_async.version.__version__
+        remote = await self._checkIbAsyncRemote()
+
+        if remote:
+            remote_version, head_sha, commits_ahead = remote
+            if commits_ahead == 0:
+                logger.info(
+                    "Using ib_async version: {} (up to date @ {})",
+                    local_version,
+                    head_sha[:12],
+                )
+            else:
+                logger.warning(
+                    "Using ib_async version: {} ({} commit{} behind remote {} @ {})",
+                    local_version,
+                    commits_ahead if commits_ahead < 50 else "50+",
+                    "s" if commits_ahead != 1 else "",
+                    remote_version,
+                    head_sha[:12],
+                )
+        else:
+            logger.info("Using ib_async version: {}", local_version)
+
         await self.prepare()
         await self.speak.say(say=f"Starting Client {self.clientId}!")
 
@@ -1303,6 +1385,32 @@ class IBKRCmdlineApp:
             except:
                 logger.exception("Uncaught exception in repl? Restarting...")
                 continue
+
+    async def _resolveAccount(self) -> None:
+        """Discover and select account ID if not already set."""
+        if self.accountId:
+            return
+
+        accounts = self.ib.managedAccounts()
+        if not accounts:
+            logger.error("No managed accounts from gateway. Check login.")
+            sys.exit(1)
+
+        if len(accounts) == 1:
+            self.accountId = accounts[0]
+            logger.info("Auto-selected account: {}", self.accountId)
+        else:
+            import questionary
+
+            chosen = await questionary.select(
+                "Select IBKR account:",
+                choices=accounts,
+            ).ask_async()
+            if not chosen:
+                logger.error("No account selected. Exiting.")
+                sys.exit(1)
+            self.accountId = chosen
+            logger.info("Selected account: {}", self.accountId)
 
     async def prepare(self):
         # Setup...
@@ -1391,15 +1499,22 @@ class IBKRCmdlineApp:
                 with Timer("[quotes :: global] Restored quote state"):
                     # run restore and local contracts qualification concurrently
                     # logger.info("pre=qualified: {}", contracts)
-                    (
-                        loadedClientDefaultQuotes,
-                        contractsQualified,
-                    ) = await asyncio.gather(
-                        # restore SHARED global symbols
-                        self.dispatch.runop("qrestore", "global", self.opstate),
-                        # prepare to restore COMMON symbols
-                        self.qualify(*contracts),
-                    )
+
+                    # Only attempt global quote restore if the group was previously saved.
+                    # On first run (or fresh cache) no global group exists — this is normal,
+                    # not an error, so we skip rather than trigger qrestore's error log.
+                    if ("quotes", "global") in self.cache:
+                        (
+                            loadedClientDefaultQuotes,
+                            contractsQualified,
+                        ) = await asyncio.gather(
+                            # restore SHARED global symbols
+                            self.dispatch.runop("qrestore", "global", self.opstate),
+                            # prepare to restore COMMON symbols
+                            self.qualify(*contracts),
+                        )
+                    else:
+                        contractsQualified = await self.qualify(*contracts)
                     # logger.info("post=qualified: {}", contractsQualified)
 
                 with Timer("[quotes :: common] Restored quote state"):
@@ -1472,6 +1587,10 @@ class IBKRCmdlineApp:
                     )
 
                     self.connected = True
+
+                    # Resolve account ID from gateway if not provided at startup.
+                    # On reconnects self.accountId is already set, so this is a no-op.
+                    await self._resolveAccount()
 
                     self.ib.reqNewsBulletins(True)
 
