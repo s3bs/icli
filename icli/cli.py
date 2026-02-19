@@ -262,7 +262,7 @@ class IBKRCmdlineApp:
     # global state variables (set per-client and per-session currently with no persistence)
     # We also populate the defaults here. We can potentially have these load from a config
     # file instead of being directly stored here.
-    localvars: dict[str, str] = field(default_factory=lambda: dict(exchange="SMART"))
+    localvars: dict[str, str] = field(default_factory=lambda: dict(exchange="SMART", loglevel="INFO"))
 
     # State caches
     quoteState: dict[str, ITicker] = field(default_factory=dict)
@@ -271,6 +271,10 @@ class IBKRCmdlineApp:
     summary: dict[str, float] = field(default_factory=dict)
     pnlSingle: dict[int, PnLSingle] = field(default_factory=dict)
     exiting: bool = False
+
+    # Console log handler (set by setupLogging, used by setConsoleLogLevel)
+    _console_handler_id: int = field(init=False, default=0)
+    _console_sink: Any = field(init=False, default=None)
 
     # cache some parsers. yes these names are confusing. sorry.
     ol: buylang.OLang = field(default_factory=buylang.OLang)
@@ -502,7 +506,8 @@ class IBKRCmdlineApp:
             original_print(x, end="")
 
         logger.remove()
-        logger.add(asink, colorize=True)
+        self._console_sink = asink
+        self._console_handler_id = logger.add(asink, colorize=True, level="INFO")
 
         # new log level to disable color bolding on INFO default
         logger.level("FRAME", no=25)
@@ -517,6 +522,16 @@ class IBKRCmdlineApp:
             level="TRACE",
             colorize=True,
         )
+
+    def setConsoleLogLevel(self, level: str) -> None:
+        """Change the console log level at runtime.
+
+        Removes the current console handler and re-adds it at the new level."""
+        logger.remove(self._console_handler_id)
+        self._console_handler_id = logger.add(
+            self._console_sink, colorize=True, level=level
+        )
+        logger.info("Console log level set to {}", level)
 
     async def qualify(self, *contracts, overwrite: bool = False) -> list[Contract]:
         return await self.qualifier.qualify(*contracts, overwrite=overwrite)
@@ -534,6 +549,17 @@ class IBKRCmdlineApp:
 
         if val:
             # if value provided, set it
+
+            # special handling for loglevel
+            if key.lower() == "loglevel":
+                level = val.upper()
+                valid = ("TRACE", "DEBUG", "INFO", "WARNING", "ERROR")
+                if level not in valid:
+                    logger.error("Invalid log level '{}'. Valid: {}", val, ", ".join(valid))
+                    return
+                self.setConsoleLogLevel(level)
+                self.localvars[key] = level
+                return
 
             # special values if setting dte things
             if key.lower() == "dte":
@@ -1183,7 +1209,10 @@ class IBKRCmdlineApp:
                 print(f"  {name:20s} {get_doc(name)}")
 
     async def runSingleCommand(self, cmd, rest):
-        with Timer(cmd):
+        import time
+
+        _t0 = time.perf_counter()
+        try:
             try:
                 await self.dispatch.runop(cmd, rest[0] if rest else None, self.opstate)
             except Exception as e:
@@ -1206,6 +1235,8 @@ class IBKRCmdlineApp:
                     err("[{}] Error parsing your input: {}", [cmd] + rest or [], se)
                 else:
                     err("[{}] Error with command: {}", [cmd] + rest or [], se)
+        finally:
+            logger.debug("[{}] Duration: {:,.4f}", cmd, time.perf_counter() - _t0)
 
     def buildRunnablesFromCommandRequest(self, text1):
         # Attempt to run the command(s) submitted into the prompt.
