@@ -18,6 +18,8 @@ import pandas as pd
 @command(names=["cash"])
 @dataclass
 class IOpCash(IOp):
+    """Display account cash and buying power at various leverage levels."""
+
     def argmap(self):
         return []
 

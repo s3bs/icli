@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 @command(names=["tasklist"])
 @dataclass
 class IOpTaskList(IOp):
+    """Display all current and running background tasks."""
+
     def argmap(self):
         return []
 

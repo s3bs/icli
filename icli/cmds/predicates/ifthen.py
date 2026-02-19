@@ -19,6 +19,8 @@ import prettyprinter as pp  # type: ignore
 @command(names=["ifthen"])
 @dataclass
 class IOpPredicateCreate(IOp):
+    """Create and activate an if-then conditional predicate rule."""
+
     predicate: str = field(init=False)
 
     def argmap(self):

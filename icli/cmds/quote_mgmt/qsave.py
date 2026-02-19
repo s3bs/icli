@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 @command(names=["qsave"])
 @dataclass
 class IOpQuoteSave(IOp):
+    """Save symbols to a named quote group and populate for live tracking."""
+
     group: str = field(init=False)
     symbols: list[str] = field(init=False)
 

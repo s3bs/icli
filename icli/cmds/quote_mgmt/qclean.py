@@ -19,6 +19,8 @@ import whenever
 @command(names=["qclean"])
 @dataclass
 class IOpQuoteClean(IOp):
+    """Remove expired option symbols from a quote group."""
+
     group: str = field(init=False)
 
     def argmap(self):

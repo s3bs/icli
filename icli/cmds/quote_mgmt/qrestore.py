@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 @command(names=["qrestore"])
 @dataclass
 class IOpQuoteRestore(IOp):
+    """Restore and repopulate a previously saved quote group."""
+
     group: str = field(init=False)
     symbols: list[str] = field(init=False)
 

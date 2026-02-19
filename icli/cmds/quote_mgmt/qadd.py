@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 @command(names=["qadd"])
 @dataclass
 class IOpQuoteAppend(IOp):
+    """Add symbols to a named quote group and populate for live tracking."""
+
     group: str = field(init=False)
     symbols: list[str] = field(init=False)
 

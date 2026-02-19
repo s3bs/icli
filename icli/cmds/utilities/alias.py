@@ -19,6 +19,8 @@ import asyncio
 @command(names=["alias"])
 @dataclass
 class IOpAlias(IOp):
+    """Execute a predefined command alias (preset command sequences)."""
+
     cmd: str = field(init=False)
     args: list[str] = field(init=False)
 

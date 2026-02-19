@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 @command(names=["taskcancel"])
 @dataclass
 class IOpTaskCancel(IOp):
+    """Cancel one or more running background tasks by ID."""
+
     ids: list[int] = field(init=False)
 
     def argmap(self):

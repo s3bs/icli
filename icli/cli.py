@@ -1150,6 +1150,38 @@ class IBKRCmdlineApp:
             except:
                 logger.exception("[{}] Collective command running failed?", cmds)
 
+    def _printHelpWithDescriptions(self):
+        """Print all commands grouped by category with their docstrings."""
+        d = self.dispatch.d
+
+        # Build a flat lookup from full command name -> class using the original
+        # opcodes (not totalOps, which drops ambiguous prefixes like 'report').
+        fullname_to_cls: dict[str, type] = {}
+        for val in d.opcodes.values():
+            if isinstance(val, dict):
+                fullname_to_cls.update(val)
+
+        def get_doc(name: str) -> str:
+            cls = fullname_to_cls.get(name) or d.totalOps.get(name)
+            if cls and cls.__doc__ and "state: Any = None" not in cls.__doc__:
+                return cls.__doc__.strip().split("\n")[0]
+            return ""
+
+        uncategorized = []
+        for row in d.cmdsByGroup:
+            if isinstance(row, dict):
+                for category, commands in row.items():
+                    print(f"\n{category}:")
+                    for name in sorted(commands):
+                        print(f"  {name:20s} {get_doc(name)}")
+            else:
+                uncategorized.append(row)
+
+        if uncategorized:
+            print("\nOther:")
+            for name in sorted(uncategorized):
+                print(f"  {name:20s} {get_doc(name)}")
+
     async def runSingleCommand(self, cmd, rest):
         with Timer(cmd):
             try:
@@ -1257,6 +1289,11 @@ class IBKRCmdlineApp:
             # split into command dispatch lookup and arguments to command
             cmd, *rest = ccmd.split(" ", 1)
             # logger.info("cmd: {}, rest: {}", cmd, rest)
+
+            # Intercept bare '?' to show enhanced help with descriptions
+            if cmd == "?":
+                self._printHelpWithDescriptions()
+                continue
 
             # If background command, add to our background concurrency group for this block
             if isBackgroundCmd:

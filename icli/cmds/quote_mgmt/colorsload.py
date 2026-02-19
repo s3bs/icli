@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 @command(names=["colorsload"])
 @dataclass
 class IOpColorsLoad(IOp):
+    """Load and apply toolbar color settings from cache."""
+
     otherClientId: int = field(init=False)
 
     def argmap(self):

@@ -26,6 +26,8 @@ import pandas as pd
 @command(names=["depth"])
 @dataclass
 class IOpDepth(IOp):
+    """Display market depth (order book) for a symbol with aggregated bids and asks."""
+
     sym: str = field(init=False)
     count: int = 3
 

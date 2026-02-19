@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 @command(names=["qloadsnapshot"])
 @dataclass
 class IOpQuoteLoadSnapshot(IOp):
+    """Load a previously saved quote snapshot (optionally from another client)."""
+
     otherClientId: int = field(init=False)
 
     def argmap(self):
