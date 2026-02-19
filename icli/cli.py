@@ -264,7 +264,7 @@ class IBKRCmdlineApp:
     # global state variables (set per-client and per-session currently with no persistence)
     # We also populate the defaults here. We can potentially have these load from a config
     # file instead of being directly stored here.
-    localvars: dict[str, str] = field(default_factory=lambda: dict(exchange="SMART", loglevel="INFO"))
+    localvars: dict[str, str] = field(default_factory=lambda: dict(exchange="SMART", loglevel="INFO", altrow_color="#c0c0c0"))
 
     # State caches
     quoteState: dict[str, ITicker] = field(default_factory=dict)
@@ -273,6 +273,9 @@ class IBKRCmdlineApp:
     summary: dict[str, float] = field(default_factory=dict)
     pnlSingle: dict[int, PnLSingle] = field(default_factory=dict)
     exiting: bool = False
+
+    # Alternating row color for zebra-striped quote rows (themed via colorset)
+    altrowColor: str = field(init=False, default="#c0c0c0")
 
     # Console log handler (set by setupLogging, used by setConsoleLogLevel)
     _console_handler_id: int = field(init=False, default=0)
@@ -390,7 +393,7 @@ class IBKRCmdlineApp:
 
         return False
 
-    def updateToolbarStyle(self, val: str) -> None:
+    def updateToolbarStyle(self, val: str, altrow_color: str | None = None) -> None:
         """Create new style object when style text"""
 
         assert isinstance(val, str)
@@ -402,18 +405,23 @@ class IBKRCmdlineApp:
         # Solarized(ish): {"bottom-toolbar": "fg:#002B36 bg:#839496"}
 
         # Want to add your own custom theme? Submit an issue with good color combinations and we'll add it!
+        # Each theme is (toolbar_style, altrow_color) for alternating quote rows.
         schemes: Final = dict(
-            default="fg:default bg:default", solar1="fg:#002B36 bg:#839496"
+            default=("fg:default bg:default", "#c0c0c0"),
+            solar1=("fg:#002B36 bg:#839496", "#003845"),
         )
 
         # if input is a theme name, use the theme colors
         if theme := schemes.get(val):
-            logger.info("Setting toolbar style ({}): {}", val, theme)
-            val = theme
+            logger.info("Setting toolbar style ({}): {}", val, theme[0])
+            altrow_color = altrow_color or theme[1]
+            val = theme[0]
         else:
-            logger.info("Setting toolbar style: {}", theme)
+            logger.info("Setting toolbar style: {}", val)
 
         self.toolbarStyle = Style.from_dict({"bottom-toolbar": val})
+        if altrow_color:
+            self.altrowColor = altrow_color
 
     def tradingDays(self, days):
         return tradingDaysNextN(days)
@@ -560,6 +568,33 @@ class IBKRCmdlineApp:
 
         if val:
             # if value provided, set it
+
+            # special handling for alternating row color
+            # Note: bare "#hex" values get stripped by the comment parser
+            # (split_commands treats " #..." as end-of-line comments), so
+            # we accept hex colors without the '#' prefix and prepend it.
+            if key.lower() == "altrow_color":
+                if val.lower() == "off":
+                    self.altrowColor = ""
+                    self.localvars[key] = val
+                    logger.info("Alternating row color disabled")
+                    return
+
+                # normalize: accept bare hex (c0c0c0) and prepend #
+                color = val
+                if not color.startswith("#"):
+                    color = f"#{color}"
+
+                # validate: must be #rgb or #rrggbb with valid hex digits
+                hexpart = color[1:]
+                if len(hexpart) not in (3, 6) or not all(c in "0123456789abcdefABCDEF" for c in hexpart):
+                    logger.error("Invalid hex color '{}'. Use 3 or 6 hex digits, e.g. c0c0c0 or fff", val)
+                    return
+
+                self.altrowColor = color
+                self.localvars[key] = color
+                logger.info("Alternating row color set to {}", color)
+                return
 
             # special handling for loglevel
             if key.lower() == "loglevel":

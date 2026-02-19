@@ -17,7 +17,18 @@ if TYPE_CHECKING:
 @command(names=["colorset"])
 @dataclass
 class IOpColors(IOp):
-    """Select a new color scheme either by collection name or with direct colors."""
+    """Set toolbar color scheme by theme name or direct style string.
+
+    Available themes:
+      default  — terminal default colors (reversed white bg)
+      solar1   — Solarized dark (fg:#002B36 bg:#839496)
+
+    Custom style example:
+      colorset fg:#708C4C bg:#33363D
+
+    Each theme includes a matching alternating row color for quote rows.
+    Override manually with: set altrow_color #hexcolor
+    Disable alternating rows: set altrow_color off"""
 
     style: str = field(init=False)
 
@@ -26,7 +37,10 @@ class IOpColors(IOp):
 
     async def run(self):
         cacheKey = ("colors", f"client-{self.state.clientId}")
-        cacheVal = dict(toolbar=self.style)
-        self.cache.set(cacheKey, {"colors": cacheVal})  # type: ignore
+        cacheVal = dict(toolbar=self.style, altrow_color=self.state.altrowColor)
 
         self.state.updateToolbarStyle(self.style)
+
+        # save after updateToolbarStyle so altrowColor reflects the theme
+        cacheVal["altrow_color"] = self.state.altrowColor
+        self.cache.set(cacheKey, {"colors": cacheVal})  # type: ignore

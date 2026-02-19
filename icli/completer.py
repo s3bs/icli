@@ -43,6 +43,8 @@ class CommandCompleter(Completer):
         "cancel": "_complete_order_ids",
         # Fixed enums
         "clear": "_complete_clear_targets",
+        # Themes
+        "colorset": "_complete_colorset_themes",
         # Config keys
         "set": "_complete_set_keys",
         "unset": "_complete_set_keys",
@@ -173,10 +175,21 @@ class CommandCompleter(Completer):
             if target.startswith(prefix.lower()):
                 yield Completion(target, start_position=-len(prefix))
 
+    _COLORSET_THEMES = {
+        "default": "terminal default colors (reversed white bg)",
+        "solar1": "Solarized dark (fg:#002B36 bg:#839496)",
+    }
+
     # Known value sets for specific localvar keys
     _SET_VALUE_COMPLETIONS = {
         "loglevel": ["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"],
+        "altrow_color": ["off", "c0c0c0", "003845"],
     }
+
+    def _complete_colorset_themes(self, prefix, **kwargs):
+        for name, desc in self._COLORSET_THEMES.items():
+            if name.startswith(prefix.lower()):
+                yield Completion(name, start_position=-len(prefix), display_meta=desc)
 
     def _complete_set_keys(self, prefix, arg_text=""):
         words = arg_text.split()

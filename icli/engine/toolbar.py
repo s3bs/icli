@@ -997,15 +997,20 @@ class ToolbarRenderer:
             # printing (if you are trading speads only and single legs are taking up most of the screen, this
             # helps save your screen space a bit).
             # We could extend this "show/hide" system to different categories or symbols in the future.
+            altrowColor = app.altrowColor
+            # safety: only use color if it looks like a valid #hex to avoid
+            # an infinite prompt_toolkit renderer crash loop
+            if altrowColor and not (altrowColor.startswith("#") and len(altrowColor) in (4, 7)):
+                altrowColor = ""
             for qp, (sym, quote) in enumerate(qs):
                 if niceticker := formatTicker(quote):
                     row = f"{qp:>2}) " + niceticker
-                    if qp % 2 == 1:
+                    if altrowColor and qp % 2 == 1:
                         # The toolbar uses prompt_toolkit's default 'reverse'
                         # style, which swaps fg↔bg. So to change the rendered
                         # *background* of a row, we must set fg (not bg).
                         # Pad with spaces so the stripe extends to terminal edge.
-                        row = f"<zebra fg='#c0c0c0'>{row}{' ' * rowlen}</zebra>"
+                        row = f"<zebra fg='{altrowColor}'>{row}{' ' * rowlen}</zebra>"
                     rows.append(row)
 
             # basically, if we've never reconnected, then only show one update count

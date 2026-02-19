@@ -39,7 +39,8 @@ class IOpColorsLoad(IOp):
         try:
             # snapshots are always saved with exact Contract objects, so we can just restore them directly
             cs = cons.get("colors", {}).get("toolbar")
-            self.state.updateToolbarStyle(cs)
+            altrow_color = cons.get("colors", {}).get("altrow_color")
+            self.state.updateToolbarStyle(cs, altrow_color=altrow_color)
             return True
         except:
             pass
