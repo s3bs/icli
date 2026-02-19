@@ -10,8 +10,6 @@ exchanges
     Futures exchange mappings and contract metadata.
     - ``FutureSymbol``: immutable dataclass (symbol, exchange, name, tradingClass, currency, hasOptions)
     - ``FUTS_EXCHANGE``: dict[str, FutureSymbol] — 500+ IBKR futures keyed by symbol *and* tradingClass
-    - ``FutureDetail``: tick-level contract specs (tick size, decimals, value-per-tick)
-    - ``FUTS_TICK_DETAIL``: dict[str, FutureDetail] — 150 contracts with tick data
 
 technicals
     Time-weighted EMA and ATR calculations.

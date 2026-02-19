@@ -15,7 +15,7 @@ from loguru import logger
 from mutil.dispatch import DArg
 
 from icli.cmds.base import IOp, command
-from icli.engine.exchanges import FUTS_EXCHANGE, FUTS_TICK_DETAIL
+from icli.engine.exchanges import FUTS_EXCHANGE
 
 if TYPE_CHECKING:
     pass
@@ -129,11 +129,6 @@ class IOpDetails(IOp):
             )
 
             try:
-                logger.info(
-                    "[{}] Extra: {}",
-                    detail.contract.localSymbol,
-                    pp.pformat(FUTS_TICK_DETAIL[detail.contract.symbol]),
-                )
                 logger.info(
                     "[{}] Extra: {}",
                     detail.contract.localSymbol,

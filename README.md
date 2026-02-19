@@ -169,7 +169,7 @@ The quote view uses this order for showing quotes based on security type:
 - single options
 - option spreads
 
-Futures are sorted first by our specific futures order defined by the `FUT_ORD` dict in `cli.py` then by name if there isn't a specific sort order requested (because we want `/ES` `/NQ` `/YM` first in the futures list and not `/GBP` `/BTC` etc).
+Futures are sorted first by our specific futures order defined by the `FUT_ORD` dict in `engine/calendar.py` then by name if there isn't a specific sort order requested (because we want `/ES` `/NQ` `/YM` first in the futures list and not `/GBP` `/BTC` etc).
 
 Stocks/etfs sort in REVERSE alphabetical order because it's easier to see the entry point of the stocks view at the lowest point rather than visually tracking the break where futures and stocks meet.
 
@@ -177,7 +177,7 @@ Single option quotes are displayed in alphabetical order.
 
 Finally, option spreads show last because they are multi-line displays showing each symbol leg per spread.
 
-The overall sort is controlled via `cli.py:sortQuotes()`
+The overall sort is controlled via `engine/calendar.py:sortQuotes()`
 
 #### Status Bar
 
@@ -266,7 +266,7 @@ View all commands by category by entering `?`.
 
 View per-command documentation by entering a command name followed by a question: `limit?` or `lim?` or `exec?` or `pos?` or `cancel?` etc.
 
-If you have any doubt about how a command may change your account, check the source for the command in `lang.py` yourself just to confirm the data workflow.
+If you have any doubt about how a command may change your account, check the source for the command in `icli/cmds/<category>/<command>.py` yourself just to confirm the data workflow.
 
 ## Caveats
 
@@ -321,21 +321,19 @@ The easiest way to launch the cli is via uv in the repository directory: `uv run
 
 cli commands are processed in a prompt-toolkit loop managed by the somewhat too long `dorepl()` method of class `IBKRCmdlineApp` in [`cli.py`](icli/cli.py).
 
-cli commands are implemented in [`lang.py`](icli/lang.py) with each command being a class with custom argument definitions as organized by the [`mutil/dispatch.py`](https://github.com/mattsta/mutil/blob/main/mutil/dispatch.py) system. Check out the `OP_MAP` variable for how command names are mapped to categories and implementation classes.
+cli commands are auto-discovered from [`icli/cmds/`](icli/cmds/) with each command being a class with custom argument definitions as organized by the [`mutil/dispatch.py`](https://github.com/mattsta/mutil/blob/main/mutil/dispatch.py) system. Commands are grouped by category subdirectory (e.g. `trading/`, `utilities/`, `data/`) and registered via the `@command` decorator.
 
 Your CLI session history is persisted in `~/.tplatcli_ibkr_history.{live,sandbox}` so you have search and up/down recall across sessions.
 
-All actions taken by [the underlying IBKR API wrapper](https://github.com/erdewit/ib_insync) are logged in a file named `icli-{timestamp}.log` so you can always review every action the API received (which will also be the log where you can view any series of order updates/modifications/cancels since IBKR removes all intermediate order states of orders after an order is complete).
+All actions taken by [the underlying IBKR API wrapper](https://github.com/ib-api-reloaded/ib_async) are logged in a file named `icli-{timestamp}.log` so you can always review every action the API received (which will also be the log where you can view any series of order updates/modifications/cancels since IBKR removes all intermediate order states of orders after an order is complete).
 
 All times in the interface are normalized to display in US Eastern Time where pre-market hours are 0400-0928, market hours are 0930-1600, and after hours is 1600-2000 (with options trading 0930-1600, with certain etf and index options trading until 1615 every day). Futures operate under their [own weird futures hours](https://www.cmegroup.com/trading-hours.html) schedule, so enjoy trading your Wheat Options and [Mini-sized Wheat Futures](https://www.cmegroup.com/markets/agriculture/grains/mini-sized-wheat.html) between 1900-0745 and 0830-1345.
 
 ### Notable Helpers
 
-[`futsexchanges.py`](icli/futsexchanges.py) contains a mostly auto-generated mapping of future symbols to their matching exchanges and full text descriptions. The mapping can be updated by extracting updated versions of [the table of IBKR futures](https://www.interactivebrokers.com/en/index.php?f=26662) using `generateFuturesMapping()`. The reason for this mapping is when entering a futures trade order, IBKR requires the exchange name where the futures symbol lives (i.e. there's no SMART futures router and futures only trade on their owning exchange), so we had to create a full lookup table on our own.
+[`engine/exchanges.py`](icli/engine/exchanges.py) contains the `FUTS_EXCHANGE` mapping of futures symbols to their exchanges and descriptions. When entering a futures trade order, IBKR requires the exchange name where the futures symbol lives (there's no SMART futures router), so this lookup table is essential. The original `generateFuturesMapping()` scraper is broken (IBKR replaced the source page with a JS wizard), so entries must be maintained manually. Runtime tick-size and pricing data is handled dynamically by `instrumentdb` via `reqContractDetails` + `reqMarketRule`.
 
-Also note: some of the future symbol descriptions are manually modified after the automatic mapping download. Read end of the file for notes about which symbols need additional metadata or symbol changes due to conflicting names or multiplier inconsistencies (example: `BRR` bitcoin contract is one symbol, but microbitcoin is 0.1 multiplier, while standard is 5 multiplier, and for some reason IBKR didn't implement the micro as the standard `MBT` symbol, so you have to use it as `BRR` with explicit multiple).
-
-[`orders.py`](icli/orders.py) is a central location for defining IBKR order types and extracting order objects from specified order types using all [20+ poorly documented, conflicting, and multi-purpose optional metadata fields](https://interactivebrokers.github.io/tws-api/classIBApi_1_1Order.html) an order may need.
+[`engine/orders.py`](icli/engine/orders.py) is a central location for defining IBKR order types and extracting order objects from specified order types using all [20+ poorly documented, conflicting, and multi-purpose optional metadata fields](https://interactivebrokers.github.io/tws-api/classIBApi_1_1Order.html) an order may need.
 
 ## TODO
 
