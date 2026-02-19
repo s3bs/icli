@@ -125,20 +125,33 @@ class CommandCompleter(Completer):
             yield from method(current_word, arg_text=arg_text)
 
     def _complete_symbols(self, prefix, **kwargs):
-        symbols = set()
+        symbols: set[str] = set()
 
-        # Live quote symbols
-        symbols.update(self.app.quoteState.keys())
+        # Live quote symbols — snapshot keys to avoid RuntimeError from
+        # concurrent dict modification (completer runs in a thread).
+        # Filter to strings only: spread (Bag) quotes use tuple keys
+        # from lookupKey() which can't be displayed as completions.
+        try:
+            symbols.update(k for k in self.app.quoteState if isinstance(k, str))
+        except RuntimeError:
+            pass
 
         # Portfolio position symbols
         try:
             for pos in self.app.ib.positions():
-                symbols.add(pos.contract.localSymbol or pos.contract.symbol)
+                sym = pos.contract.localSymbol or pos.contract.symbol
+                if sym:
+                    symbols.add(sym)
         except Exception:
             pass
 
-        # Positional references
-        for i, (sym, _) in enumerate(self.app.quotesPositional):
+        # Positional references — snapshot the list for thread safety
+        try:
+            positional = list(self.app.quotesPositional)
+        except (RuntimeError, ValueError):
+            positional = []
+
+        for i, (sym, _) in enumerate(positional):
             ref = f":{i}"
             if ref.startswith(prefix) or sym.lower().startswith(prefix.lower()):
                 yield Completion(ref, start_position=-len(prefix), display_meta=sym)
@@ -150,7 +163,8 @@ class CommandCompleter(Completer):
 
     def _complete_quote_groups(self, prefix, **kwargs):
         try:
-            for key in self.app.cache:
+            # diskcache iteration is thread-safe but wrap defensively
+            for key in list(self.app.cache):
                 if isinstance(key, tuple) and len(key) == 2 and key[0] == "quotes":
                     group = key[1]
                     if group.lower().startswith(prefix.lower()):
@@ -160,7 +174,7 @@ class CommandCompleter(Completer):
 
     def _complete_order_ids(self, prefix, **kwargs):
         try:
-            for trade in self.app.ib.openTrades():
+            for trade in list(self.app.ib.openTrades()):
                 oid = str(trade.order.orderId)
                 sym = trade.contract.localSymbol or trade.contract.symbol
                 if oid.startswith(prefix):
@@ -207,14 +221,23 @@ class CommandCompleter(Completer):
         if "info".startswith(prefix.lower()):
             yield Completion("info", start_position=-len(prefix), display_meta="Show ICLI_ environment variables")
 
-        for key in sorted(self.app.localvars.keys()):
+        try:
+            localvars = dict(self.app.localvars)
+        except RuntimeError:
+            localvars = {}
+
+        for key in sorted(localvars):
             if key.lower().startswith(prefix.lower()):
-                val = self.app.localvars[key]
                 yield Completion(
-                    key, start_position=-len(prefix), display_meta=str(val)
+                    key, start_position=-len(prefix), display_meta=str(localvars[key])
                 )
 
     def _complete_balance_fields(self, prefix, **kwargs):
-        for key in sorted(self.app.summary.keys()):
+        try:
+            keys = list(self.app.summary.keys())
+        except RuntimeError:
+            keys = []
+
+        for key in sorted(keys):
             if key.lower().startswith(prefix.lower()):
                 yield Completion(key, start_position=-len(prefix))
