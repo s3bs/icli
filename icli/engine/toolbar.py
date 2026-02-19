@@ -999,7 +999,14 @@ class ToolbarRenderer:
             # We could extend this "show/hide" system to different categories or symbols in the future.
             for qp, (sym, quote) in enumerate(qs):
                 if niceticker := formatTicker(quote):
-                    rows.append(f"{qp:>2}) " + niceticker)
+                    row = f"{qp:>2}) " + niceticker
+                    if qp % 2 == 1:
+                        # The toolbar uses prompt_toolkit's default 'reverse'
+                        # style, which swaps fg↔bg. So to change the rendered
+                        # *background* of a row, we must set fg (not bg).
+                        # Pad with spaces so the stripe extends to terminal edge.
+                        row = f"<zebra fg='#c0c0c0'>{row}{' ' * rowlen}</zebra>"
+                    rows.append(row)
 
             # basically, if we've never reconnected, then only show one update count
             if app.updates == app.updatesReconnect:
