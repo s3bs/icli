@@ -32,6 +32,8 @@ from prompt_toolkit.history import FileHistory, ThreadedHistory
 from prompt_toolkit.shortcuts import set_title
 from prompt_toolkit.styles import Style
 
+from icli.completer import CommandCompleter
+
 import icli.engine.audio as awwdio
 import icli.calc
 import icli.engine.orders as orders
@@ -538,10 +540,19 @@ class IBKRCmdlineApp:
 
     def updateGlobalStateVariable(self, key: str, val: str | None) -> None:
         # 'val' of None means just print the output, while 'val' of empty string means delete the key.
+
         if val is None:
-            logger.info("No value provided, so printing current settings:")
+            # 'set info' also prints ICLI-prefixed environment variables
+            if key.lower() == "info":
+                logger.info("ICLI environment variables:")
+                for k, v in sorted(os.environ.items()):
+                    if k.startswith("ICLI_"):
+                        logger.info("  {} = {}", k, v)
+                logger.info("")
+
+            logger.info("Current settings:")
             for k, v in sorted(self.localvars.items()):
-                logger.info("SET: {} = {}", k, v)
+                logger.info("  {} = {}", k, v)
 
             return
 
@@ -1751,6 +1762,7 @@ class IBKRCmdlineApp:
                         logger.exception("[{}] Runnable failed?", run)
 
     async def dorepl(self):
+        completer = CommandCompleter(self)
         session: PromptSession = PromptSession(
             history=ThreadedHistory(
                 FileHistory(
@@ -1758,6 +1770,7 @@ class IBKRCmdlineApp:
                 )
             ),
             auto_suggest=AutoSuggestFromHistory(),
+            completer=completer,
         )
 
         app = session.app
@@ -1788,11 +1801,11 @@ class IBKRCmdlineApp:
                     # NOTE: refresh interval is handled manually by "call_later(timeout, fn)" at the end of each toolbar update
                     # refresh_interval=3,
                     # mouse_support=True,
-                    # completer=completer, # <-- causes not to be full screen due to additional dropdown space
                     complete_in_thread=True,
                     complete_while_typing=True,
                     search_ignore_case=True,
                     style=self.toolbarStyle,
+                    reserve_space_for_menu=4,
                 )
 
                 # log user input to our active logfile(s)
