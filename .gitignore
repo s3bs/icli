@@ -10,3 +10,5 @@ icli/hist/
 *.txt
 poetry.lock
 __pycache__/
+.hypothesis/
+.coverage*

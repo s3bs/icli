@@ -48,6 +48,13 @@ Some helpful advanced commands only available in `icli`:
   - You can also do math on arbitrary symbols if you want to for some reason: `(/ AAPL TSLA)`
   - prices used for symbol math are the live bid/ask midpoint price for each symbol.
   - You can also use row-position details for a live quote value too: `(/ AAPL :18)`.
+- You can run arbitrary Python expressions against live app state using the `debug` command or `!` shorthand:
+  - `! ib.isConnected()` checks if the IB gateway is connected.
+  - `! account.get("BuyingPower4")` reads a live account value.
+  - `! [t.contract.localSymbol for t in ib.tickers()]` lists all subscribed ticker symbols.
+  - `debug await qualify(cfn("ES"))` qualifies a futures contract (async calls are auto-awaited).
+  - `! a = 1; b = 2; print(a + b)` runs multiple statements on one line.
+  - Pre-populated shortcuts include: `ib`, `quotes`, `account`, `positions`, `cfn()`, `qualify()`, `calc`, `idb`, `pnl`, `logger`, and more. Run `debug?` for the full list.
 - You can simulate "action-if-touched" using our `ifthen` predicates like: `if AAPL last > 300: buy AAPL 100 AF` which will check _every_ AAPL quote update, and if the last trade price is over $300, your command executes. The `ifthen` system supports unlimited combinations of conditions triggering on any combinations of: last, bid, ask, high, low, emas, atrs, greeks, and others per symbol. See code or test case examples for usability conditions.
 - Also, the `ifthen` system supports loading "ifthen programs" into `icli` so you can alternate commands based on some algo feed conditions (i.e. "if ema crossover to the upside, buy; if ema crossover to the downside, sell" but the conditions remain active after one exectues so your "algo conditions" remain live and continue executing until you manually stop it (or unless you run out of buying power)).
 

@@ -224,9 +224,7 @@ class IBKRCmdlineApp:
     # The Connection
     ib: IB = field(
         default_factory=lambda: IB(
-            defaults=IBDefaults(
-                emptyPrice=None, emptySize=None, unset=None, timezone=USEastern
-            )
+            defaults=IBDefaults(emptyPrice=None, emptySize=None, unset=None, timezone=USEastern)
         )
     )
 
@@ -264,7 +262,9 @@ class IBKRCmdlineApp:
     # global state variables (set per-client and per-session currently with no persistence)
     # We also populate the defaults here. We can potentially have these load from a config
     # file instead of being directly stored here.
-    localvars: dict[str, str] = field(default_factory=lambda: dict(exchange="SMART", loglevel="INFO", altrow_color="#c0c0c0"))
+    localvars: dict[str, str] = field(
+        default_factory=lambda: dict(exchange="SMART", loglevel="INFO", altrow_color="#c0c0c0")
+    )
 
     # State caches
     quoteState: dict[str, ITicker] = field(default_factory=dict)
@@ -332,9 +332,7 @@ class IBKRCmdlineApp:
     # Specific dict of ONLY fields we show in the live account status toolbar.
     # Saves us from sorting/filtering self.summary() with every full bar update.
     accountStatus: dict[str, float] = field(
-        default_factory=lambda: dict(
-            zip(LIVE_ACCOUNT_STATUS, [0.00] * len(LIVE_ACCOUNT_STATUS))
-        )
+        default_factory=lambda: dict(zip(LIVE_ACCOUNT_STATUS, [0.00] * len(LIVE_ACCOUNT_STATUS)))
     )
 
     # Cache all contractIds and names to their fully qualified contract object values
@@ -348,9 +346,7 @@ class IBKRCmdlineApp:
     loadingCommissions: bool = False
 
     toolbarStyle: Style = field(
-        default_factory=lambda: Style.from_dict(
-            {"bottom-toolbar": "fg:default bg:default"}
-        )
+        default_factory=lambda: Style.from_dict({"bottom-toolbar": "fg:default bg:default"})
     )
 
     opstate: Any = field(init=False)
@@ -442,9 +438,7 @@ class IBKRCmdlineApp:
         self.setupLogging()
 
         # attach runtime to multi-template manager (since we can't attach the runtime at field() init time)
-        self.ifthenTemplates = ifthen_templates.IfThenMultiTemplateManager(
-            self.ifthenRuntime
-        )
+        self.ifthenTemplates = ifthen_templates.IfThenMultiTemplateManager(self.ifthenRuntime)
 
         # note: ordermgr is NOT scoped per-client because all clients can see all positions.
         self.ordermgr = OrderMgr("Executed Positions")
@@ -459,28 +453,51 @@ class IBKRCmdlineApp:
         self.idb = instrumentdb.IInstrumentDatabase(self)
 
         from icli.engine.portfolio import PortfolioQueries
+
         self.portfolio = PortfolioQueries(self.ib, self, self.conIdCache, self.idb)
 
         from icli.engine.qualification import ContractQualifier
+
         self.qualifier = ContractQualifier(self.ib, self.conIdCache, self.quoteState, self.ol)
 
         from icli.engine.quotemanager import QuoteManager
+
         self.quotemanager = QuoteManager(
-            self.ib, self.quoteState, self.quotesPositional,
-            self.contractIdsToQuoteKeysMappings, self.conIdCache, self.idb, self.ol, app=self
+            self.ib,
+            self.quoteState,
+            self.quotesPositional,
+            self.contractIdsToQuoteKeysMappings,
+            self.conIdCache,
+            self.idb,
+            self.ol,
+            app=self,
         )
 
         from icli.engine.events import IBEventRouter
+
         self.events = IBEventRouter(
-            self.ib, self.quoteState, self.summary, self.accountStatus, self.pnlSingle,
-            self.iposition, self.fillers, self.ordermgr, self.speak, self.duplicateMessageHandler,
-            self.ifthenRuntime, self.conIdCache, self.contractIdsToQuoteKeysMappings, app=self
+            self.ib,
+            self.quoteState,
+            self.summary,
+            self.accountStatus,
+            self.pnlSingle,
+            self.iposition,
+            self.fillers,
+            self.ordermgr,
+            self.speak,
+            self.duplicateMessageHandler,
+            self.ifthenRuntime,
+            self.conIdCache,
+            self.contractIdsToQuoteKeysMappings,
+            app=self,
         )
 
         from icli.engine.placement import OrderPlacer
+
         self.placer = OrderPlacer(self.ib, self.conIdCache, self.idb, app=self)
 
         from icli.engine.toolbar import ToolbarRenderer
+
         self.toolbar = ToolbarRenderer(app=self)
 
     def setupLogging(self) -> None:
@@ -489,9 +506,7 @@ class IBKRCmdlineApp:
         # in the CLI, check this log file for what ib_insync is actually doing.
         now = pd.Timestamp("now")
         LOGDIR = (
-            pathlib.Path(os.getenv("ICLI_LOGDIR", "runlogs"))
-            / f"{now.year}"
-            / f"{now.month:02}"
+            pathlib.Path(os.getenv("ICLI_LOGDIR", "runlogs")) / f"{now.year}" / f"{now.month:02}"
         )
         LOGDIR.mkdir(exist_ok=True, parents=True)
         LOG_FILE_TEMPLATE = str(
@@ -538,9 +553,7 @@ class IBKRCmdlineApp:
 
         Removes the current console handler and re-adds it at the new level."""
         logger.remove(self._console_handler_id)
-        self._console_handler_id = logger.add(
-            self._console_sink, colorize=True, level=level
-        )
+        self._console_handler_id = logger.add(self._console_sink, colorize=True, level=level)
         logger.info("Console log level set to {}", level)
 
     async def qualify(self, *contracts, overwrite: bool = False) -> list[Contract]:
@@ -587,8 +600,12 @@ class IBKRCmdlineApp:
 
                 # validate: must be #rgb or #rrggbb with valid hex digits
                 hexpart = color[1:]
-                if len(hexpart) not in (3, 6) or not all(c in "0123456789abcdefABCDEF" for c in hexpart):
-                    logger.error("Invalid hex color '{}'. Use 3 or 6 hex digits, e.g. c0c0c0 or fff", val)
+                if len(hexpart) not in (3, 6) or not all(
+                    c in "0123456789abcdefABCDEF" for c in hexpart
+                ):
+                    logger.error(
+                        "Invalid hex color '{}'. Use 3 or 6 hex digits, e.g. c0c0c0 or fff", val
+                    )
                     return
 
                 self.altrowColor = color
@@ -646,7 +663,9 @@ class IBKRCmdlineApp:
         else:
             logger.info("SET: {} = {}", key, val)
 
-    def contractsForPosition(self, sym, qty: float | None = None) -> list[tuple[Contract, float, float]]:
+    def contractsForPosition(
+        self, sym, qty: float | None = None
+    ) -> list[tuple[Contract, float, float]]:
         return self.qualifier.contractsForPosition(sym, qty)
 
     async def contractForOrderRequest(self, oreq) -> Contract | None:
@@ -669,25 +688,21 @@ class IBKRCmdlineApp:
     ) -> Decimal | None:
         return await self.placer.comply(contract, price, direction)
 
-    async def complyNear(
-        self, contract: Contract, price: Decimal | float
-    ) -> Decimal | None:
+    async def complyNear(self, contract: Contract, price: Decimal | float) -> Decimal | None:
         return await self.placer.complyNear(contract, price)
 
-    async def complyUp(
-        self, contract: Contract, price: Decimal | float
-    ) -> Decimal | None:
+    async def complyUp(self, contract: Contract, price: Decimal | float) -> Decimal | None:
         return await self.placer.complyUp(contract, price)
 
-    async def complyDown(
-        self, contract: Contract, price: Decimal | float
-    ) -> Decimal | None:
+    async def complyDown(self, contract: Contract, price: Decimal | float) -> Decimal | None:
         return await self.placer.complyDown(contract, price)
 
     async def safeModify(self, contract, order, **kwargs) -> Order:
         return await self.placer.safeModify(contract, order, **kwargs)
 
-    async def fetchContractExpirations(self, contract: Contract, fetchDates: list[str] | None = None):
+    async def fetchContractExpirations(
+        self, contract: Contract, fetchDates: list[str] | None = None
+    ):
         return await self.qualifier.fetchContractExpirations(contract, fetchDates)
 
     async def isGuaranteedSpread(self, bag: Contract) -> bool:
@@ -714,8 +729,17 @@ class IBKRCmdlineApp:
         config=None,
     ) -> tuple[Order | None, Order | None]:
         return self.placer.createBracketAttachParent(
-            order, sideClose, qty, profitLimit, lossLimit, lossStopPrice,
-            outsideRth, tif, orderTypeProfit, orderTypeLoss, config
+            order,
+            sideClose,
+            qty,
+            profitLimit,
+            lossLimit,
+            lossStopPrice,
+            outsideRth,
+            tif,
+            orderTypeProfit,
+            orderTypeLoss,
+            config,
         )
 
     async def placeOrderForContract(
@@ -753,16 +777,12 @@ class IBKRCmdlineApp:
     async def ifthenExtensionVerticalSpreadCall(
         self, mailbox: dict[str, Any], symbol: str, startStrike: float, distance: float
     ):
-        return await self.ifthenExtensionVerticalSpread(
-            "c", mailbox, symbol, startStrike, distance
-        )
+        return await self.ifthenExtensionVerticalSpread("c", mailbox, symbol, startStrike, distance)
 
     async def ifthenExtensionVerticalSpreadPut(
         self, mailbox: dict[str, Any], symbol: str, startStrike: float, distance: float
     ):
-        return await self.ifthenExtensionVerticalSpread(
-            "p", mailbox, symbol, startStrike, distance
-        )
+        return await self.ifthenExtensionVerticalSpread("p", mailbox, symbol, startStrike, distance)
 
     async def ifthenExtensionVerticalSpread(
         self,
@@ -782,9 +802,9 @@ class IBKRCmdlineApp:
 
         contracts = await isq.run()
 
-        assert (
-            len(contracts) == 3
-        ), f"Expected 3 results from spread adding, but got {len(contracts)=} for {contracts=}?"
+        assert len(contracts) == 3, (
+            f"Expected 3 results from spread adding, but got {len(contracts)=} for {contracts=}?"
+        )
 
         # technically, we think these are always in the same order of [bag, buy, sell], but if the order
         # changes, we want to always grab the bag first to populate legIds, then use legIds again.
@@ -923,9 +943,7 @@ class IBKRCmdlineApp:
                 # We prefer 'actual 'here because if this is being _repopulated_ after a reconnect(),
                 # the original 'symbol' isn't valid (if it's a position request) but we added 'actual'
                 # when the predicate was first created to represent the _real_ symbol data needed.
-                if iticker := symbolToTickerMap.get(
-                    extractor.actual or extractor.symbol
-                ):
+                if iticker := symbolToTickerMap.get(extractor.actual or extractor.symbol):
                     # Note: DO NOT .lower() 'extractor.field' because the fields are case sensitive when doing algo lookups...
                     datafield = extractor.datafield
                     timeframe = extractor.timeframe
@@ -945,9 +963,7 @@ class IBKRCmdlineApp:
                     )
 
                     assert datafield
-                    fetcher = self.dataExtractorForTicker(
-                        iticker, datafield, timeframe or 0
-                    )
+                    fetcher = self.dataExtractorForTicker(iticker, datafield, timeframe or 0)
 
                     extractor.datafetcher = fetcher
 
@@ -1051,7 +1067,9 @@ class IBKRCmdlineApp:
                     # EMA of weighted sum of every period (N, N-1) pair against the 6.5 hour EMA decayed by 'timeframe' ema
                     fetcher = lambda *args: base.diffVWAPLogScoreEMA[timeframe]
                 case _:
-                    assert None, f"Invalid EMA sub-fields requested? Full request was for: {subtype}"
+                    assert None, (
+                        f"Invalid EMA sub-fields requested? Full request was for: {subtype}"
+                    )
 
             return fetcher
 
@@ -1091,9 +1109,10 @@ class IBKRCmdlineApp:
                 contractId = c.conId
                 mul = float(c.multiplier or 1)
                 accountReader = self.ib.wrapper.portfolio[self.accountId]
-                fetcher = lambda *args: accountReader[
-                    contractId
-                ].averageCost / math.copysign(accountReader[contractId].position, mul)
+                fetcher = lambda *args: (
+                    accountReader[contractId].averageCost
+                    / math.copysign(accountReader[contractId].position, mul)
+                )
             case "qty":
                 # fetch live qty for position as reported by portfolio reporting
                 assert iticker.ticker.contract
@@ -1353,6 +1372,8 @@ class IBKRCmdlineApp:
             # custom usability hack: we can detect math ops and not need to prefix 'math' to them manually
             if ccmd[0] == "(":
                 ccmd = f"math {ccmd}"
+            elif ccmd[0] == "!":
+                ccmd = f"debug {ccmd[1:].lstrip()}"
             elif ccmd.startswith("if ") or ccmd.startswith("while "):
                 # also allow 'if' statements directly then auto-prepend 'ifthen' to them.
                 ccmd = f"ifthen {ccmd}"
@@ -1637,9 +1658,7 @@ class IBKRCmdlineApp:
                             # logger.info("Adding quote for: {} via {}", contract, contracts)
                             self.addQuoteFromContract(contract)
                         except Exception as e:
-                            logger.error(
-                                "Failed to add on startup: {} ({})", contract, e
-                            )
+                            logger.error("Failed to add on startup: {} ({})", contract, e)
 
             # also, re-attach predicate data readers since any previous live data sources
             # the predicates were attached to no longer exist after the reconnect().
@@ -1689,8 +1708,7 @@ class IBKRCmdlineApp:
                         clientId=self.clientId,
                         readonly=False,
                         account=self.accountId,
-                        fetchFields=ib_async.StartupFetchALL
-                        & ~ib_async.StartupFetch.EXECUTIONS,
+                        fetchFields=ib_async.StartupFetchALL & ~ib_async.StartupFetch.EXECUTIONS,
                     )
 
                     logger.info(
@@ -1800,9 +1818,7 @@ class IBKRCmdlineApp:
         completer = CommandCompleter(self)
         session: PromptSession = PromptSession(
             history=ThreadedHistory(
-                FileHistory(
-                    os.path.expanduser(f"~/.tplatcli_ibkr_history.{self.levelName()}")
-                )
+                FileHistory(os.path.expanduser(f"~/.tplatcli_ibkr_history.{self.levelName()}"))
             ),
             auto_suggest=AutoSuggestFromHistory(),
             completer=completer,
