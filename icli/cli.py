@@ -200,6 +200,33 @@ futures = [
 ]
 
 
+# Common timezone abbreviations -> IANA names for the 'set timezone' command
+_TIMEZONE_ALIASES: Final[dict[str, str]] = {
+    "ET": "US/Eastern",
+    "EST": "US/Eastern",
+    "EDT": "US/Eastern",
+    "CT": "US/Central",
+    "CST": "US/Central",
+    "CDT": "US/Central",
+    "MT": "US/Mountain",
+    "MST": "US/Mountain",
+    "MDT": "US/Mountain",
+    "PT": "US/Pacific",
+    "PST": "US/Pacific",
+    "PDT": "US/Pacific",
+    "GMT": "GMT",
+    "UTC": "UTC",
+    "CET": "CET",
+    "EET": "EET",
+    "JST": "Asia/Tokyo",
+    "HKT": "Asia/Hong_Kong",
+    "SGT": "Asia/Singapore",
+    "IST": "Asia/Kolkata",
+    "AEST": "Australia/Sydney",
+    "BST": "Europe/London",
+}
+
+
 @dataclass(slots=True)
 class IBKRCmdlineApp:
     # Your IBKR Account ID (auto-discovered if not provided)
@@ -263,7 +290,7 @@ class IBKRCmdlineApp:
     # We also populate the defaults here. We can potentially have these load from a config
     # file instead of being directly stored here.
     localvars: dict[str, str] = field(
-        default_factory=lambda: dict(exchange="SMART", loglevel="INFO", altrow_color="#c0c0c0")
+        default_factory=lambda: dict(exchange="SMART", loglevel="INFO", altrow_color="#c0c0c0", timezone="US/Eastern")
     )
 
     # State caches
@@ -548,6 +575,20 @@ class IBKRCmdlineApp:
             colorize=True,
         )
 
+    @staticmethod
+    def _resolve_timezone(val: str) -> str | None:
+        """Resolve a timezone string to an IANA name, or None if invalid."""
+        alias = _TIMEZONE_ALIASES.get(val.upper())
+        if alias:
+            return alias
+
+        # Try as direct IANA name
+        try:
+            whenever.ZonedDateTime.now(val)
+            return val
+        except Exception:
+            return None
+
     def setConsoleLogLevel(self, level: str) -> None:
         """Change the console log level at runtime.
 
@@ -622,6 +663,20 @@ class IBKRCmdlineApp:
                     return
                 self.setConsoleLogLevel(level)
                 self.localvars[key] = level
+                return
+
+            # special handling for timezone
+            if key.lower() == "timezone":
+                tz = self._resolve_timezone(val)
+                if tz is None:
+                    logger.error(
+                        "Unknown timezone '{}'. Use IANA names (US/Eastern, "
+                        "America/Chicago) or abbreviations (EST, CST, GMT, UTC, PT).",
+                        val,
+                    )
+                    return
+                self.localvars[key] = tz
+                logger.info("Timezone set to {}", tz)
                 return
 
             # special values if setting dte things

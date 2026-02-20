@@ -109,7 +109,8 @@ class ToolbarRenderer:
 
         app.updates += 1
         app.updatesReconnect += 1
-        app.now = whenever.ZonedDateTime.now("US/Eastern")
+        tz = app.localvars.get("timezone", "US/Eastern")
+        app.now = whenever.ZonedDateTime.now(tz)
         app.nowpy = app.now.py_datetime()
 
         # -- Settings read from app localvars --------------------------------
@@ -984,7 +985,7 @@ class ToolbarRenderer:
                 fetchEndOfMarketDayAtDate(app.now.year, app.now.month, app.now.day)
                 - app.now
             )
-            todayclose = f"mktclose: {convert_time(untilClose.in_seconds())}"
+            todayclose = f"mktclose: {as_duration(untilClose.in_seconds())}"
             daysInMonth = f"dim: {tradingDaysRemainingInMonth()}"
             daysInYear = f"diy: {tradingDaysRemainingInYear()}"
 
@@ -1025,7 +1026,7 @@ class ToolbarRenderer:
 
             return HTML(
                 # all these spaces look weird, but they (kinda) match the underlying column-based formatting offsets
-                f"""[{app.clientId}] {str(app.now):<44}{onc} {updatesFmt}          {spxbreakers}          {openorders}    {openpositions}    {todayexecutions}      {todayclose}   ({daysInMonth} :: {daysInYear})\n"""
+                f"""[{app.clientId}] {app.nowpy.strftime('%Y-%m-%d %H:%M:%S %Z'):<28}{onc} {updatesFmt}          {spxbreakers}          {openorders}    {openpositions}    {todayexecutions}      {todayclose}   ({daysInMonth} :: {daysInYear})\n"""
                 + "\n".join(rows)
                 + "\n"
                 + balrows

@@ -198,6 +198,11 @@ class CommandCompleter(Completer):
     _SET_VALUE_COMPLETIONS = {
         "loglevel": ["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"],
         "altrow_color": ["off", "c0c0c0", "003845"],
+        "timezone": [
+            "US/Eastern", "US/Central", "US/Pacific", "US/Mountain",
+            "UTC", "GMT", "EST", "CST", "PST", "PT", "CT", "ET",
+            "Europe/London", "Asia/Tokyo", "Asia/Hong_Kong",
+        ],
     }
 
     def _complete_colorset_themes(self, prefix, **kwargs):
