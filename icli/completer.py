@@ -194,7 +194,8 @@ class CommandCompleter(Completer):
         "solar1": "Solarized dark (fg:#002B36 bg:#839496)",
     }
 
-    # Known value sets for specific localvar keys
+    # Known value sets for specific localvar keys.
+    # Keys listed here also appear as tab-completable key names in `set`.
     _SET_VALUE_COMPLETIONS = {
         "loglevel": ["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"],
         "altrow_color": ["off", "c0c0c0", "003845"],
@@ -203,6 +204,10 @@ class CommandCompleter(Completer):
             "UTC", "GMT", "EST", "CST", "PST", "PT", "CT", "ET",
             "Europe/London", "Asia/Tokyo", "Asia/Hong_Kong",
         ],
+        "headers": ["on", "off"],
+        "last": ["on", "off"],
+        "hide": ["on", "off"],
+        "hidemissing": ["on", "off"],
     }
 
     def _complete_colorset_themes(self, prefix, **kwargs):
@@ -231,10 +236,15 @@ class CommandCompleter(Completer):
         except RuntimeError:
             localvars = {}
 
-        for key in sorted(localvars):
+        # Merge currently-set keys with all known keys so undiscovered
+        # settings still appear in tab completion before first use.
+        all_keys = set(localvars) | set(self._SET_VALUE_COMPLETIONS)
+
+        for key in sorted(all_keys):
             if key.lower().startswith(prefix.lower()):
+                meta = str(localvars[key]) if key in localvars else ""
                 yield Completion(
-                    key, start_position=-len(prefix), display_meta=str(localvars[key])
+                    key, start_position=-len(prefix), display_meta=meta
                 )
 
     def _complete_balance_fields(self, prefix, **kwargs):

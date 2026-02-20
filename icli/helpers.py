@@ -275,12 +275,27 @@ class ITicker:
 
     @property
     def vwap(self) -> float:
-        """Override "vwap" paramter option for ITicker allowing us to return our synthetic ema vwap if vwap doesn't exist."""
+        """Return VWAP for this instrument, falling back to a synthetic EMA approximation.
+
+        Source priority:
+          1. IBKR native ticker.vwap — the real Volume-Weighted Average Price computed
+             server-side from the actual trade tape (price × volume at each print,
+             divided by cumulative volume). Resets at session open (9:30 AM ET for
+             US equities). Available for most stocks/ETFs with decent volume.
+          2. Synthetic fallback: ema[RTH_EMA_VWAP] — a time-weighted EMA with a
+             6.5-hour (390-minute / 23,400-second) decay window, matching one full
+             Regular Trading Hours session. Approximates VWAP by slowly tracking
+             the session's price center. Used for instruments where IBKR doesn't
+             provide a native VWAP (futures, indexes, options, thinly-traded names).
+
+        For spreads (bags), we always use the synthetic EMA rather than combining
+        leg VWAPs, because far-OTM legs often have sparse trades making their
+        individual IBKR VWAPs stale and unreliable.
+        """
 
         if vwap := self.ticker.vwap:
             return vwap
 
-        # return our "daily hours EMA" which should _approximate_ a VWAP for most instruments.
         return self.ema[RTH_EMA_VWAP]
 
     @property

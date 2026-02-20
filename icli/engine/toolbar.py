@@ -35,6 +35,173 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
+# Quote tier classification (mirrors sortQuotes() grouping in calendar.py)
+# ---------------------------------------------------------------------------
+
+# Named ETFs that sort alongside futures/indexes in tier 0
+_TIER0_ETFS = {
+    "SPY", "UPRO", "SPXL", "SOXL", "SOXS",
+    "QQQ", "TQQQ", "SQQQ", "IWM", "DIA",
+}
+
+
+def _quote_tier(contract) -> int:
+    """Return the display-group tier for a contract (0–3).
+
+    Tiers mirror the first tuple element from sortQuotes() in calendar.py:
+      0 = Futures, Indexes, named ETFs, Crypto, Forex
+      1 = Equities (stocks, warrants, other ETFs)
+      2 = Single-leg options (OPT, FOP, EC)
+      3 = Spreads / bags (multi-leg combos)
+    """
+    st = contract.secType
+    if st in {"FUT", "IND", "CONTFUT", "CRYPTO", "CASH"}:
+        return 0
+    if st == "BAG":
+        return 3
+    if st in {"OPT", "FOP", "EC"}:
+        return 2
+    # tier 0 named ETFs: only when symbol == localSymbol (avoids option legs)
+    if contract.symbol == contract.localSymbol and contract.symbol in _TIER0_ETFS:
+        return 0
+    return 1
+
+
+# ---------------------------------------------------------------------------
+# Column header strings for each tier (shown when `set headers true`)
+# ---------------------------------------------------------------------------
+# These are aligned to match the fixed-width format strings in formatTicker().
+# Enable via: set headers true
+#
+# Equity / Futures / Index columns (tier 0 and 1):
+#   Symbol      9 chars    Ticker symbol (localSymbol with spaces stripped)
+#   EMA-15s    10 chars    Exponential moving average over ~15 s (60 ticks × 250 ms)
+#   (±Now)      8 chars    currentPrice − EMA-15s (positive = price above its short EMA)
+#   >                      Trend arrow: EMA-15s vs EMA-75s direction (> rising, < falling, = flat)
+#   EMA-75s    10 chars    Exponential moving average over ~75 s (300 ticks × 250 ms)
+#   (±Now)      8 chars    currentPrice − EMA-75s
+#   Price      10 chars    Current price: bid/ask midpoint (or last trade if `set last true`)
+#   ±Sprd       6 chars    Half the bid-ask spread (ask − midpoint)
+#   (%Hi ±Hi)  17 chars    % and $ below session high (negative = below high)
+#   (%Lo ±Lo)  14 chars    % and $ above session low (positive = above low)
+#   (%EOD ±EOD)17 chars    % and $ change from previous session close
+#   High       10 chars    Session high
+#   Low        10 chars    Session low
+#   Bid×Size / Ask×Size    NBBO: bid price × size, ask price × size (purple background)
+#   (ATR3m)     7 chars    Average True Range (atrs[180], count-based — see docs/atr-time-fix.md)
+#   (%VWAP ±VWAP) 17 chars % and $ from VWAP (IBKR native VWAP when available; otherwise a
+#                          synthetic 6.5-hour / 390-minute EMA approximating one RTH session.
+#                          IBKR VWAP resets at session open; the EMA fallback decays continuously.)
+#   EOD        10 chars    Previous session close price
+#   (Age)       9 chars    Time since last quote update
+#   @ (Trade)              Time since last trade (shown only when recent)
+#
+# Single-leg option columns (tier 2):
+#   Symbol     22 chars    Option localSymbol (OCC format or decoded FOP)
+#   [Undly (ITM Dist%)]    Underlying price, ITM flag, % distance strike-to-underlying
+#   [IV]                   Implied volatility
+#   [Delta]                Option delta
+#   EMA-15s     6 chars    Short-term EMA of option mark
+#   > / < / =              Trend direction
+#   EMA-75s     6 chars    Longer-term EMA of option mark
+#   Mark ±Sprd             Mark price (mid or model) and half-spread
+#   (%Hi ±Hi High)         % return from high, $ diff, session high
+#   (%Lo ±Lo Low)          % return from low, $ diff, session low
+#   (%EOD ±EOD EOD)        % return from close, $ diff, previous close
+#   Bid×Size / Ask×Size    Option NBBO
+#   ±VWAP                  $ distance from VWAP
+#   (Age)                  Time since last quote update
+#   (ShortBE @ Dist)       Short break-even price @ distance from underlying
+#   (DTE)                  Days (or duration) to expiration
+#
+# Spread / bag columns (tier 3):
+#   Legs                   Multi-line: action, right, ratio, symbol for each leg
+#   [IV] [Delta] [Theta] [Vega] [Width]   Combined greeks and spread width
+#   EMA-15s > EMA-75s      Short/long EMAs with trend
+#   Mark ±Sprd             Mark and half-spread
+#   (%Hi ±Hi High)         % return from high, $ diff, high
+#   (%Lo ±Lo Low)          % return from low, $ diff, low
+#   Bid×Size / Ask×Size    Spread NBBO
+#   ±VWAP                  $ from VWAP
+#   (Age)                  Time since last quote
+#   :: [Quantiles]         Price quintile buckets with [X] marking current position
+#   (r) (s) (w)            Range, std dev, width-to-mark ratio
+
+# Build headers using the SAME field widths as formatTicker() so alignment is guaranteed.
+# Each label is padded to match the exact format spec of its data column.
+# IMPORTANT: parenthesized fields use literal "(" and ")" at boundaries so the "("
+# aligns with the "(" in data rows (e.g. data "( -0.12%  -3.25)" → header "( %Hi      ±Hi)").
+# Verified: total width = 234 chars, matching a real equity data row.
+# fmt: off
+_HEADER_EQUITY = " ".join([
+    f"{'Symbol':<9}",              #  9  f"{ls:<9}"
+    f"{'EMA-15s':>10}",            # 10  f"{e100:>10}"
+    f"({'±Now':>6})",              #  8  f"({e100diff:>6})"
+    f"{'':>1}",                    #  1  f"{trend}"
+    f"{'EMA-75s':>10}",            # 10  f"{e300:>10}"
+    f"({'±Now':>6})",              #  8  f"({e300diff:>6})"
+    f"{'Price':>10} {'±Sprd':>7}", # 18  f"{usePrice:>10} ±{spread:<6}"
+    f"({'%Hi':>7} {'±Hi':>8})",    # 18  f"({pct:>6.2f% + amt:>8})"
+    f"({'%Lo':>6} {'±Lo':>6})",    # 15  f"({pct:>5.2f% + amt:>6})"
+    f"({'%EOD':>7} {'±EOD':>8})",  # 18  f"({pct:>6.2f% + amt:>8})"
+    f"{'High':>10}",               # 10  f"{high:>10}"
+    f"{'Low':>10}",                # 10  f"{low:>10}"
+    f"{'Bid':>10} x {'Size':>6} {'Ask':>10} x {'Size':>6}",  # 39  bid×size ask×size
+    f"({'ATR3m':>5})",             #  7  f"({atr:>5})"
+    f"({'%VWAP':>7} {'±VWAP':>8})",  # 18  f"({pct:>6.2f% + amt:>8})"
+    f"{'EOD':>10}",                # 10  f"{close:>10}"
+    f"({'Age':>7})",               #  9  f"({ago:>7})"
+])
+
+# Option header — some fields have variable width (nan vs value), so alignment is best-effort.
+_HEADER_OPTION = " ".join([
+    f"{'Option Symbol':<22}",              # 22  f"{rowName:<21}:"
+    f"[{'Undly':>8} ({'ITM':>1} {'Dist%)]':>8}",  # 25  [u undPrice (itm diff%)]
+    f"[iv {'IV]':>5}",                     #  9  [iv X.XX]
+    f"[d {'Dlt]':>5}",                     #  9  [d -X.XX]
+    f"{'EMA15':>6}",                       #  6  fmtPriceOpt:>6
+    f"{'':>1}",                            #  1  trend
+    f"{'EMA75':>6}",                       #  6  fmtPriceOpt:>6
+    f"{'Mark':>6} ±{'Sprd':>4}",          # 13  mark:>6 ±half:>5
+    f"({'%Hi':>7} {'±Hi':>7} {'High':>5})",    # 25  "(pct amt high)"
+    f"({'%Lo':>7} {'±Lo':>7} {'Low':>5})",     # 25
+    f"({'%EOD':>7} {'±EOD':>7} {'EOD':>5})",   # 25
+    f" {'Bid':>6} x {'Size':>6}   {'Ask':>6} x {'Size':>6}",  # 34  " " + bid×size + "   " + ask×size
+    f"{'±VWAP':>6}",                       #  6  amtVWAPColor visible chars
+    f" ({'Age':>7})",                      # 10  " ({ago:>7})"
+    f" ({'ShortBE':>8} @ {'Dist':>5})",    # 22  " (s comp @ diff)"
+    f" ({'DTE':>5} {'':>1})",              #  9  " (X.XX d)"
+])
+
+# Spread header — spread rows are multi-line so first-line width varies.
+_HEADER_SPREAD = " ".join([
+    f"{'Spread Legs':<21}",                # ~21  rowName first line
+    f"[iv {'IV]':>5}",                     #  9  [iv X.XX]
+    f"[d {'Dlt]':>5}",                     #  9  [d -X.XX]
+    f"[t {'Tht]':>6}",                     # 10  [t  -X.XX]
+    f"[v {'Vga]':>5}",                     #  9  [v X.XX]
+    f"[w {'W]':>3}",                       #  6  [w X.X]
+    f"{'EMA15':>6}",                       #  6  fmtPriceOpt:>6
+    f"{'':>1}",                            #  1  trend
+    f"{'EMA75':>6}",                       #  6  fmtPriceOpt:>6
+    f" {'Mark':>5} ±{'Sprd':>4}",         # 13  " " mark:>5 ±half:<4
+    f" ({'%Hi':>7} {'±Hi':>7} {'High':>5})",   # 26  " (pct amt high)"
+    f"({'%Lo':>7} {'±Lo':>7} {'Low':>5})",     # 25
+    f" {'Bid':>6} x {'Size':>6}   {'Ask':>6} x {'Size':>6}",  # 34
+    f"{'±VWAP':>6}",                       #  6
+    f" ({'Age':>7})",                      # 10
+])
+# fmt: on
+
+_TIER_HEADERS = {
+    0: _HEADER_EQUITY,
+    1: _HEADER_EQUITY,   # equities use the same column layout as futures/indexes
+    2: _HEADER_OPTION,
+    3: _HEADER_SPREAD,
+}
+
+
+# ---------------------------------------------------------------------------
 # Module-level formatting helpers (no closure state — easily testable)
 # ---------------------------------------------------------------------------
 
@@ -117,6 +284,7 @@ class ToolbarRenderer:
         useLast = app.localvars.get("last")
         hideSingleLegs = app.localvars.get("hide")
         hideMissing = app.localvars.get("hidemissing")
+        showHeaders = app.localvars.get("headers", "").lower() in ("true", "on", "1", "yes")
 
         # -- Nested formatting helpers (use closure over useLast etc.) -------
 
@@ -517,24 +685,28 @@ class ToolbarRenderer:
                         widthCents = 0
                         wpts = nan
 
+                    # Spread / bag row — column reference (see also _HEADER_SPREAD):
+                    #   Legs | [IV] [Delta] [Theta] [Vega] [Width] | EMA-15s | trend |
+                    #   EMA-75s | Mark ±Sprd | (%Hi ±Hi High) | (%Lo ±Lo Low) |
+                    #   Bid×Size Ask×Size | ±VWAP | (Age) | :: [Quantiles] (range) (stdev) (w/mark)
                     return " ".join(
                         [
-                            rowName,
-                            f"[iv {collectiveIV or 0:>5.2f}]",
-                            f"[d {collectiveDelta or 0:>5.2f}]",
-                            f"[t {collectiveTheta or 0:>6.2f}]",
-                            f"[v {collectiveVega or 0:>5.2f}]",
-                            f"[w {collectiveWidth or 0:>3.{widthCents}f}]",
-                            f"{fmtPriceOpt(e100):>6}",
-                            f"{trend}",
-                            f"{fmtPriceOpt(e300):>6}",
-                            f" {fmtPriceOpt(mark):>5} ±{fmtPriceOpt((ask or nan) - mark, decimals):<4}",
-                            f" ({pctBigHigh} {amtBigHigh} {fmtPriceOpt(high):>6})" if high else " (                       )",
-                            f"({pctBigLow} {amtBigLow} {fmtPriceOpt(low):>6})" if low else "(                       )",
-                            f" {fmtPriceOpt(bid):>6} x {b_s}   {fmtPriceOpt(ask):>6} x {a_s}",
-                            f"{amtBigVWAPColor}",
-                            f" ({ago:>7})",
-                            f"  :: {partsFormatted}  (r {minmax:.2f}) (s {std:.2f}) (w {wpts / legsAdjust:.2f}; {collectiveWidth / (mark or 1) / legsAdjust:,.1f}x)",
+                            rowName,                        # Multi-line leg descriptions (action, right, ratio, symbol)
+                            f"[iv {collectiveIV or 0:>5.2f}]",   # Combined implied volatility
+                            f"[d {collectiveDelta or 0:>5.2f}]", # Combined delta
+                            f"[t {collectiveTheta or 0:>6.2f}]", # Combined theta
+                            f"[v {collectiveVega or 0:>5.2f}]",  # Combined vega
+                            f"[w {collectiveWidth or 0:>3.{widthCents}f}]",  # Spread width (strike distance)
+                            f"{fmtPriceOpt(e100):>6}",     # EMA-15s of spread mark
+                            f"{trend}",                     # > / < / =
+                            f"{fmtPriceOpt(e300):>6}",     # EMA-75s of spread mark
+                            f" {fmtPriceOpt(mark):>5} ±{fmtPriceOpt((ask or nan) - mark, decimals):<4}",  # Mark ±Sprd
+                            f" ({pctBigHigh} {amtBigHigh} {fmtPriceOpt(high):>6})" if high else " (                       )",  # %Hi ±Hi High
+                            f"({pctBigLow} {amtBigLow} {fmtPriceOpt(low):>6})" if low else "(                       )",      # %Lo ±Lo Low
+                            f" {fmtPriceOpt(bid):>6} x {b_s}   {fmtPriceOpt(ask):>6} x {a_s}",  # Bid×Size / Ask×Size
+                            f"{amtBigVWAPColor}",           # ±VWAP: $ from VWAP
+                            f" ({ago:>7})",                 # Age: time since last quote
+                            f"  :: {partsFormatted}  (r {minmax:.2f}) (s {std:.2f}) (w {wpts / legsAdjust:.2f}; {collectiveWidth / (mark or 1) / legsAdjust:,.1f}x)",  # Quantiles, range, stdev, width/mark
                             "HALTED!" if c.halted else "",
                         ]
                     )
@@ -683,28 +855,34 @@ class ToolbarRenderer:
                         )
                     )
 
-                    # this is SINGLE LEG OPTION ROWS
+                    # Single-leg option row — column reference (see also _HEADER_OPTION):
+                    #   Symbol | [Undly (ITM Dist%)] | [IV] | [Delta] | EMA-15s | trend |
+                    #   EMA-75s | Mark ±Sprd | (%Hi ±Hi High) | (%Lo ±Lo Low) |
+                    #   (%EOD ±EOD EOD) | Bid×Size Ask×Size | ±VWAP | (Age) |
+                    #   (ShortBE @ Dist) | (DTE)
+                    # Note: %Hi/%Lo/%EOD here are multiplicative returns (e.g. 900% from low),
+                    # not additive differences as in equity rows.
                     # fmt: off
                     return " ".join(
                         [
-                            rowName,
-                            f"[u {und or np.nan:>8,.2f} ({itm:<1} {underlyingStrikeDifference or np.nan:>7,.2f}%)]",
-                            f"[iv {iv or np.nan:.2f}]",
-                            f"[d {delta or np.nan:>5.2f}]",
+                            rowName,                        # Option symbol (OCC format or decoded FOP)
+                            f"[u {und or np.nan:>8,.2f} ({itm:<1} {underlyingStrikeDifference or np.nan:>7,.2f}%)]",  # Underlying price, ITM flag, strike-vs-underlying %
+                            f"[iv {iv or np.nan:.2f}]",     # Implied volatility
+                            f"[d {delta or np.nan:>5.2f}]", # Delta
                             # do we want to show theta or not? Not useful for intra-day trading and we have it in `info` output anyway too.
                             # f"[t {theta or np.nan:>5.2f}]",
-                            f"{fmtPriceOpt(e100):>6}",
-                            f"{trend}",
-                            f"{fmtPriceOpt(e300):>6}",
-                            f"{fmtPriceOpt(mark or (c.modelGreeks.optPrice if c.modelGreeks else 0)):>6} ±{fmtPriceOpt((ask or np.nan) - mark, decimals):<4}",
-                            f"({pctBigHigh} {amtBigHigh} {fmtPriceOpt(high):>6})" if high else "(                       )",
-                            f"({pctBigLow} {amtBigLow} {fmtPriceOpt(low):>6})" if low else "(                       )",
-                            f"({pctBigClose} {amtBigClose} {fmtPriceOpt(close):>6})" if close else "(                       )",
-                            f" {fmtPriceOpt(bid or np.nan):>6} x {b_s}   {fmtPriceOpt(ask or np.nan):>6} x {a_s}",
-                            f"{amtVWAPColor}",
-                            f" ({ago:>7})",
-                            f" (s {compensated:>8,.2f} @ {compdiff:>6,.2f})",
-                            f" ({when:>3.2f} d)" if when >= 1 else f" ({as_duration(when * 86400)})",
+                            f"{fmtPriceOpt(e100):>6}",     # EMA-15s of mark
+                            f"{trend}",                     # > / < / =
+                            f"{fmtPriceOpt(e300):>6}",     # EMA-75s of mark
+                            f"{fmtPriceOpt(mark or (c.modelGreeks.optPrice if c.modelGreeks else 0)):>6} ±{fmtPriceOpt((ask or np.nan) - mark, decimals):<4}",  # Mark ±Sprd
+                            f"({pctBigHigh} {amtBigHigh} {fmtPriceOpt(high):>6})" if high else "(                       )",  # %Hi ±Hi High
+                            f"({pctBigLow} {amtBigLow} {fmtPriceOpt(low):>6})" if low else "(                       )",    # %Lo ±Lo Low
+                            f"({pctBigClose} {amtBigClose} {fmtPriceOpt(close):>6})" if close else "(                       )",  # %EOD ±EOD EOD
+                            f" {fmtPriceOpt(bid or np.nan):>6} x {b_s}   {fmtPriceOpt(ask or np.nan):>6} x {a_s}",  # Bid×Size / Ask×Size
+                            f"{amtVWAPColor}",              # ±VWAP: $ from VWAP
+                            f" ({ago:>7})",                 # Age: time since last quote
+                            f" (s {compensated:>8,.2f} @ {compdiff:>6,.2f})",  # ShortBE: break-even if short @ distance from underlying
+                            f" ({when:>3.2f} d)" if when >= 1 else f" ({as_duration(when * 86400)})",  # DTE: days/duration to expiration
                             "HALTED!" if c.halted else "",
                         ]
                     )
@@ -775,8 +953,8 @@ class ToolbarRenderer:
                 else ("      ", "         ")
             )
 
-            # somewhat circuitous logic to format NaNs and values properly at the same string padding offsets
-            # Showing the 3 minute ATR by default. We have other ATRs to choose from. See per-symbol 'info' output for all live values.
+            # ATR3m: Average True Range. Note: count-based, not time-based (see docs/atr-time-fix.md).
+            # atrs[180] = 720-sample buffer, 360-sample decay. "3 min" assumes 4 Hz ticks.
             atrval = c.atrs[180].atr.current
 
             # if ATR > 100, omit cents so it fits in the narrow column easier
@@ -814,28 +992,32 @@ class ToolbarRenderer:
             else:
                 trend = "="
 
+            # Equity / Futures / Index row — column reference (see also _HEADER_EQUITY):
+            #   Symbol | EMA-15s | (±Now) | trend | EMA-75s | (±Now) | Price ±Sprd |
+            #   (%Hi ±Hi) | (%Lo ±Lo) | (%EOD ±EOD) | High | Low |
+            #   Bid×Size Ask×Size | (ATR3m) | (%VWAP ±VWAP) | EOD | (Age) | @ (Trade)
             # fmt: off
             return " ".join(
                 [
-                    f"{ls:<9}",
-                    f"{e100:>10,.{decimals}f}",
-                    f"({e100diff:>6,.2f})" if e100diff else "(      )",
-                    f"{trend}",
-                    f"{e300:>10,.{decimals}f}",
-                    f"({e300diff:>6,.2f})" if e300diff else "(      )",
-                    f"{usePrice:>10,.{decimals}f} ±{fmtEquitySpread(ask - usePrice, decimals) if (ask and ask >= usePrice) else '':<6}",
-                    f"({pctUndHigh} {amtUndHigh})",
-                    f"({pctUpLow} {amtUpLow})",
-                    f"({pctUpClose} {amtUpClose})",
-                    f"{high or np.nan:>10,.{decimals}f}",
-                    f"{low or np.nan:>10,.{decimals}f}",
-                    f"<aaa bg='purple'>{c.bid or np.nan:>10,.{decimals}f} x {b_s} {ask or np.nan:>10,.{decimals}f} x {a_s}</aaa>",
-                    f"({atr})",
-                    f"({pctVWAP} {amtVWAPColor})",
-                    f"{close or np.nan:>10,.{decimals}f}",
-                    f"({ago:>7})",
+                    f"{ls:<9}",                             # Symbol
+                    f"{e100:>10,.{decimals}f}",             # EMA-15s (60 ticks × 250 ms)
+                    f"({e100diff:>6,.2f})" if e100diff else "(      )",  # ±Now: price − EMA-15s
+                    f"{trend}",                             # > / < / = (EMA-15s vs EMA-75s)
+                    f"{e300:>10,.{decimals}f}",             # EMA-75s (300 ticks × 250 ms)
+                    f"({e300diff:>6,.2f})" if e300diff else "(      )",  # ±Now: price − EMA-75s
+                    f"{usePrice:>10,.{decimals}f} ±{fmtEquitySpread(ask - usePrice, decimals) if (ask and ask >= usePrice) else '':<6}",  # Price ±Sprd (half-spread)
+                    f"({pctUndHigh} {amtUndHigh})",         # %Hi ±Hi: % and $ below session high
+                    f"({pctUpLow} {amtUpLow})",             # %Lo ±Lo: % and $ above session low
+                    f"({pctUpClose} {amtUpClose})",         # %EOD ±EOD: % and $ from previous close
+                    f"{high or np.nan:>10,.{decimals}f}",   # Session high
+                    f"{low or np.nan:>10,.{decimals}f}",    # Session low
+                    f"<aaa bg='purple'>{c.bid or np.nan:>10,.{decimals}f} x {b_s} {ask or np.nan:>10,.{decimals}f} x {a_s}</aaa>",  # Bid×Size / Ask×Size (NBBO)
+                    f"({atr})",                             # ATR3m: 3-minute ATR (atrs[180], 720-tick buf, 360-tick decay)
+                    f"({pctVWAP} {amtVWAPColor})",          # %VWAP ±VWAP: % and $ from VWAP (see ITicker.vwap for source)
+                    f"{close or np.nan:>10,.{decimals}f}",  # EOD: previous session close
+                    f"({ago:>7})",                          # Age: time since last quote update
                     # Only show "last trade ago" if it is recent enough
-                    f"@ ({agoLastTrade})" if agoLastTrade else "",
+                    f"@ ({agoLastTrade})" if agoLastTrade else "",  # Trade: time since last trade
                     "     HALTED!" if c.halted else "",
                 ]
             )
@@ -1003,7 +1185,22 @@ class ToolbarRenderer:
             # an infinite prompt_toolkit renderer crash loop
             if altrowColor and not (altrowColor.startswith("#") and len(altrowColor) in (4, 7)):
                 altrowColor = ""
+
+            # Track tier transitions so we can inject group header rows
+            # when `set headers true` is enabled (beginner-friendly column labels).
+            prevTier = None
+
             for qp, (sym, quote) in enumerate(qs):
+                # Optionally inject a column-description header before each new group
+                if showHeaders:
+                    tier = _quote_tier(quote.contract)
+                    if tier != prevTier:
+                        hdr = _TIER_HEADERS.get(tier, "")
+                        # Pad with spaces so the background extends to the terminal edge.
+                        # In prompt_toolkit's reverse-styled toolbar: fg→bg, bg→text color.
+                        rows.append(f"<aaa fg='#333333' bg='#aaaaaa'>    {hdr}{' ' * rowlen}</aaa>")
+                        prevTier = tier
+
                 if niceticker := formatTicker(quote):
                     row = f"{qp:>2}) " + niceticker
                     if altrowColor and qp % 2 == 1:

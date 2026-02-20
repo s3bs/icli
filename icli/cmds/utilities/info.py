@@ -33,10 +33,24 @@ import prettyprinter as pp  # type: ignore
 @command(names=["info"])
 @dataclass
 class IOpInfo(IOp):
-    """Show the underlying IBKR contract object for a symbol.
+    """Show detailed diagnostics for one or more symbols.
 
-    This is mainly useful to verify the IBKR details or extract underlying contract IDs
-    for other debugging or one-off usage purposes."""
+    Displays the IBKR contract object plus all live-computed metadata when the
+    symbol has an active market data subscription:
+
+      - Ticker snapshot (bid/ask/last, sizes, exchanges, halted state)
+      - Historical vs implied volatility with rising/falling indicator
+      - Bid/ask/last tick direction and spread
+      - Trade rate and volume rate EMA stats with log-score frames
+      - IV and delta EMA stats (options/spreads only)
+      - Price EMA stats with log-score frame across all time windows
+      - QuoteFlow analysis: average up/down move speed at each price increment
+      - All live ATR values (90 s through 1800 s lookbacks)
+      - Price history quantiles, range, min/max, and standard deviation
+      - Bag leg details and ratio breakdown (spreads only)
+      - Full greeks table (bid/ask/last/model) with theta projections (options/spreads)
+
+    Also useful for verifying IBKR contract details or extracting contract IDs."""
 
     symbols: list[str] = field(init=False)
 
