@@ -604,6 +604,8 @@ class IBKRCmdlineApp:
         # 'val' of None means just print the output, while 'val' of empty string means delete the key.
 
         if val is None:
+            from icli.completer import CommandCompleter
+
             # 'set info' also prints ICLI-prefixed environment variables
             if key.lower() == "info":
                 logger.info("ICLI environment variables:")
@@ -612,9 +614,16 @@ class IBKRCmdlineApp:
                         logger.info("  {} = {}", k, v)
                 logger.info("")
 
-            logger.info("Current settings:")
-            for k, v in sorted(self.localvars.items()):
-                logger.info("  {} = {}", k, v)
+            # Show all known settings with current values (or default "off")
+            all_keys = sorted(set(self.localvars) | set(CommandCompleter._SET_KEY_HELP))
+            logger.info("Settings:")
+            for k in all_keys:
+                v = self.localvars.get(k, "off")
+                desc = CommandCompleter._SET_KEY_HELP.get(k, "")
+                if desc:
+                    logger.info("  {:<16} = {:<16} — {}", k, v, desc)
+                else:
+                    logger.info("  {:<16} = {}", k, v)
 
             return
 

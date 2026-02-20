@@ -194,8 +194,19 @@ class CommandCompleter(Completer):
         "solar1": "Solarized dark (fg:#002B36 bg:#839496)",
     }
 
-    # Known value sets for specific localvar keys.
-    # Keys listed here also appear as tab-completable key names in `set`.
+    # Known settings: descriptions, allowed values.
+    # Keys here appear in tab-completion and `set info` help output.
+    _SET_KEY_HELP = {
+        "headers":     "Show column header rows above each quote group",
+        "last":        "Use last trade price instead of bid/ask midpoint",
+        "hide":        "Hide single-leg option rows (useful when trading spreads)",
+        "hidemissing": "Hide rows waiting for live market data",
+        "loglevel":    "Console log verbosity level",
+        "altrow_color": "Hex color for alternating row stripes (or 'off')",
+        "timezone":    "Timezone for toolbar timestamps (IANA name or abbreviation)",
+        "dte":         "Default days-to-expiration for option commands",
+    }
+
     _SET_VALUE_COMPLETIONS = {
         "loglevel": ["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"],
         "altrow_color": ["off", "c0c0c0", "003845"],
@@ -242,7 +253,11 @@ class CommandCompleter(Completer):
 
         for key in sorted(all_keys):
             if key.lower().startswith(prefix.lower()):
-                meta = str(localvars[key]) if key in localvars else ""
+                # Show current value if set, otherwise show the help description
+                if key in localvars:
+                    meta = f"= {localvars[key]}"
+                else:
+                    meta = self._SET_KEY_HELP.get(key, "")
                 yield Completion(
                     key, start_position=-len(prefix), display_meta=meta
                 )
