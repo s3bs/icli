@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import math
 import re
-from typing import TYPE_CHECKING, Iterable
+from typing import Iterable
 
 from loguru import logger
 
@@ -18,8 +18,6 @@ from icli.engine.contracts import contractForName, lookupKey, tickFieldsForContr
 from icli.engine.calendar import sortQuotes
 from icli.engine.primitives import as_duration, nan
 
-if TYPE_CHECKING:
-    import icli.lang.buylang as buylang
 
 
 class QuoteManager:
@@ -265,7 +263,7 @@ class QuoteManager:
         if not symbols:
             return
 
-        ors: list[buylang.OrderRequest] = []
+        ors: list = []
         sym: str
         for sym in symbols:
             sym = sym.upper()

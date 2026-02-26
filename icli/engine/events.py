@@ -831,17 +831,3 @@ class IBEventRouter:
             case "summary":
                 pass
 
-        if False:
-            if self._app.agent:
-
-                async def sendUpdate():
-                    from dataclasses import asdict
-                    from icli.helpers import ourjson
-
-                    if not isinstance(update, dict):
-                        send = asdict(update)
-                        await self._app.agent.sendAccountUpdate(
-                            ourjson.dumps({category: send})
-                        )
-
-                self._app.task_create("Send Account Update Payload", sendUpdate())
