@@ -19,7 +19,10 @@ def make_event_router(**overrides):
         ifthenRuntime=MagicMock(check=MagicMock(return_value=[])),
         conIdCache={},
         contractIdsToQuoteKeysMappings={},
-        app=MagicMock(),
+        session=MagicMock(accountId="U1234", clientId=0, connected=True, isSandbox=None),
+        task_create=MagicMock(),
+        build_and_run=AsyncMock(),
+        is_loading_commissions=MagicMock(return_value=False),
     )
     defaults.update(overrides)
     return IBEventRouter(**defaults)
@@ -215,9 +218,9 @@ class TestErrorHandler:
 
 class TestUpdateOrder:
     def test_skips_when_not_connected(self):
-        """updateOrder should return early when app.connected is False."""
+        """updateOrder should return early when session.connected is False."""
         router = make_event_router()
-        router._app.connected = False
+        router._session.connected = False
         trade = MagicMock()
         # Even with a mock trade, no fillers should be accessed
         router.updateOrder(trade)
@@ -226,7 +229,7 @@ class TestUpdateOrder:
     def test_notifies_fillers_on_filled(self):
         """Should set filler event when trade is fully filled."""
         router = make_event_router()
-        router._app.connected = True
+        router._session.connected = True
 
         filler = MagicMock()
         router.fillers.__getitem__ = MagicMock(return_value=filler)
@@ -245,7 +248,7 @@ class TestUpdateOrder:
     def test_does_not_notify_fillers_on_partial_fill(self):
         """Should NOT set filler event when remaining > 0."""
         router = make_event_router()
-        router._app.connected = True
+        router._session.connected = True
 
         filler = MagicMock()
         router.fillers.__getitem__ = MagicMock(return_value=filler)
@@ -271,7 +274,7 @@ class TestUpdateAgentAccountStatus:
         import datetime
 
         router = make_event_router()
-        router._app.clientId = 7
+        router._session.clientId = 7
         fill = FillReport(
             orderId=33,
             conId=123,
@@ -310,11 +313,11 @@ class TestUpdateAgentAccountStatus:
 
 class TestOrderExecuteHandler:
     @pytest.mark.asyncio
-    async def test_creates_iposition_for_new_contract(self):
+    @patch("icli.engine.events.nameForContract", return_value="AAPL")
+    async def test_creates_iposition_for_new_contract(self, mock_nfc):
         from ib_async import Stock
         iposition = {}
         router = make_event_router(iposition=iposition)
-        router._app.nameForContract = MagicMock(return_value="AAPL")
 
         contract = MagicMock(spec=Stock)
         contract.conId = 999
@@ -331,12 +334,12 @@ class TestOrderExecuteHandler:
         assert 999 in iposition
 
     @pytest.mark.asyncio
-    async def test_does_not_overwrite_existing_iposition(self):
+    @patch("icli.engine.events.nameForContract", return_value="MSFT")
+    async def test_does_not_overwrite_existing_iposition(self, mock_nfc):
         from ib_async import Stock
         existing = MagicMock()
         iposition = {555: existing}
         router = make_event_router(iposition=iposition)
-        router._app.nameForContract = MagicMock(return_value="MSFT")
 
         contract = MagicMock(spec=Stock)
         contract.conId = 555

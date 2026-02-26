@@ -448,7 +448,10 @@ class IBKRCmdlineApp:
             self.ifthenRuntime,
             self.conIdCache,
             self.contractIdsToQuoteKeysMappings,
-            app=self,
+            session=self.session,
+            task_create=self.task_create,
+            build_and_run=self.buildAndRun,
+            is_loading_commissions=lambda: self.loadingCommissions,
         )
 
         from icli.engine.placement import OrderPlacer
@@ -978,10 +981,10 @@ class IBKRCmdlineApp:
         return result
 
     def levelName(self):
-        if self.isSandbox is None:
+        if self.session.isSandbox is None:
             return "undecided"
 
-        if self.isSandbox:
+        if self.session.isSandbox:
             return "paper"
 
         return "live"

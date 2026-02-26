@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Final
 from loguru import logger
 from ib_async import Bag, Contract, NewsBulletin, NewsTick, Position, Trade
 
-from icli.engine.contracts import lookupKey
+from icli.engine.contracts import lookupKey, nameForContract
 from icli.engine.primitives import FillReport, fmtmoney
 from icli.engine.calendar import readableHTML
 import icli.engine.orders as orders
@@ -100,8 +100,14 @@ class IBEventRouter:
         Contract id lookup cache.
     contractIdsToQuoteKeysMappings:
         Shared dict mapping conId -> quote key string.
-    app:
-        Back-reference to IBKRCmdlineApp for cross-component calls.
+    session:
+        SessionConfig with accountId, clientId, connected, isSandbox.
+    task_create:
+        Callback to create a background task: (name, coroutine) -> None.
+    build_and_run:
+        Callback to parse and execute a CLI command: async (text) -> result.
+    is_loading_commissions:
+        Callback returning whether commissions are being loaded.
     """
 
     def __init__(
@@ -119,7 +125,11 @@ class IBEventRouter:
         ifthenRuntime,
         conIdCache,
         contractIdsToQuoteKeysMappings,
-        app=None,
+        *,
+        session,
+        task_create,
+        build_and_run,
+        is_loading_commissions,
     ):
         self.ib = ib
         self.quoteState = quoteState
@@ -134,7 +144,10 @@ class IBEventRouter:
         self.ifthenRuntime = ifthenRuntime
         self.conIdCache = conIdCache
         self.contractIdsToQuoteKeysMappings = contractIdsToQuoteKeysMappings
-        self._app = app  # back-reference for cross-component calls
+        self._session = session
+        self._task_create = task_create
+        self._build_and_run = build_and_run
+        self._is_loading_commissions = is_loading_commissions
 
     # ------------------------------------------------------------------
     # Order lifecycle handlers
@@ -143,7 +156,7 @@ class IBEventRouter:
     def updateOrder(self, trade: Trade):
         # Only print update if this is regular runtime and not
         # the "load all trades on startup" cycle
-        if not self._app.connected:
+        if not self._session.connected:
             return
 
         logger.warning(
@@ -196,7 +209,7 @@ class IBEventRouter:
     def commissionHandler(self, trade, fill, report):
         # Only report commissions if not bulk loading them as a refresh
         # (the bulk load API causes the event handler to fire for each historical fill)
-        if self._app.loadingCommissions:
+        if self._is_loading_commissions():
             logger.warning(
                 "Ignoring commission because bulk loading history: [{:>2} :: {} {:>7.2f} of {:>7.2f} :: {}]",
                 fill.execution.clientId,
@@ -228,7 +241,7 @@ class IBEventRouter:
                 # the status, where 'orderExecuteHandler()' always just has status of "Submitted" when an execution happens (also with no price details) which isn't as useful.
                 content = f"OPENED: {trade.orderStatus.status} FOR {fillQty} (commission {fmtmoney(fill.commissionReport.commission)})"
 
-            self._app.task_create(content, self.speak.say(say=content))
+            self._task_create(content, self.speak.say(say=content))
 
         logger.warning(
             "[{} :: {} :: {}] Order {} commission: {} {} {} at ${:,.2f} (total {} of {}) (commission {} ({} each)){}",
@@ -286,7 +299,7 @@ class IBEventRouter:
             "[{} :: {}] Trade executed for {}",
             trade.orderStatus.orderId,
             trade.orderStatus.status,
-            self._app.nameForContract(trade.contract),
+            nameForContract(trade.contract, self.conIdCache),
         )
 
         if isBag:
@@ -313,7 +326,7 @@ class IBEventRouter:
         if False:
             conId = position.contract.conId
             if conId not in self.pnlSingle:
-                self.pnlSingle[conId] = self.ib.reqPnLSingle(self._app.accountId, "", conId)
+                self.pnlSingle[conId] = self.ib.reqPnLSingle(self._session.accountId, "", conId)
             else:
                 self.iposition[position.contract].update(
                     position.contract, position.position, position.avgCost
@@ -321,7 +334,7 @@ class IBEventRouter:
 
                 # if quantity is gone, stop listening for updates and remove.
                 if position.position == 0 and conId in self.pnlSingle:
-                    self.ib.cancelPnLSingle(self._app.accountId, "", conId)
+                    self.ib.cancelPnLSingle(self._session.accountId, "", conId)
                     del self.pnlSingle[conId]
 
     async def positionActiveLifecycleDoctrine(
@@ -371,7 +384,7 @@ class IBEventRouter:
         self.iposition[contract] = position
 
         f: Final = self.fillers[contract]
-        name: Final = self._app.nameForContract(contract)
+        name: Final = nameForContract(contract, self.conIdCache)
 
         isPreview: Final = target.preview
 
@@ -425,7 +438,7 @@ class IBEventRouter:
                     break
                 else:
                     logger.info("[{}] Running: {}", name, cmd)
-                    await self._app.buildAndRun(cmd)
+                    await self._build_and_run(cmd)
 
                     await f.orderComplete()
                     continue
@@ -474,7 +487,7 @@ class IBEventRouter:
             )
 
             if not isPreview:
-                predicateId = await self._app.buildAndRun(dualside)
+                predicateId = await self._build_and_run(dualside)
 
                 # TODO: how to error check here if we run the buy, but the buy errors out? We would just wait forever here because the fill will never happen.
                 #       Do we also have to wait on the _status_ of the buy command after the predicate is executes somehow? We would need "predicate executed" trigger
@@ -510,7 +523,7 @@ class IBEventRouter:
         logger.info("[{}] Building predicate for exit: {}", name, close)
 
         if not isPreview:
-            predicateId = await self._app.buildAndRun(close)
+            predicateId = await self._build_and_run(close)
 
     # ------------------------------------------------------------------
     # Ticker / quote update handler (HOT PATH — runs 4 Hz per symbol)
@@ -563,9 +576,9 @@ class IBEventRouter:
                         logger.info(
                             "[{}] Predicate scheduling command: {}", predicateId, cmd
                         )
-                        self._app.task_create(
+                        self._task_create(
                             f"[{predicateId}] predicate command execution",
-                            self._app.buildAndRun(cmd),
+                            self._build_and_run(cmd),
                         )
                     case ifthen.IfThenRuntimeError(pid=predicateId, err=e):
                         logger.warning(
@@ -636,7 +649,7 @@ class IBEventRouter:
 
         if _dump:
             with open(
-                f"tickers-{datetime.datetime.now().date()}-{self._app.clientId}.json", "ab"
+                f"tickers-{datetime.datetime.now().date()}-{self._session.clientId}.json", "ab"
             ) as tj:
                 for ticker in tickr:
                     from icli.helpers import ourjson
@@ -668,8 +681,8 @@ class IBEventRouter:
         # regular accounts are U...; sanbox accounts are DU... (apparently)
         # Some fields are for "All" accounts under this login, which don't help us here.
         # TODO: find a place to set this once instead of checking every update?
-        if self._app.isSandbox is None and v.account != "All":
-            self._app.isSandbox = v.account[0] == "D"
+        if self._session.isSandbox is None and v.account != "All":
+            self._session.isSandbox = v.account[0] == "D"
 
         # TODO: we also want to maintain "Fake ITicker" for each account value so we can track it over time and use the ITicker values in ifthen statements.
         #       e.g: if :UPL > 10_000: evict *
@@ -827,7 +840,7 @@ class IBEventRouter:
                         # We scope order ids _per client_ since IBKR request IDs are only per-client.
                         # This also assumes you never "reset request IDs" in your gateway, but this
                         # feature is mainly for tracking trades occurring near in time together.
-                        orderid=(self._app.clientId, update.orderId),
+                        orderid=(self._session.clientId, update.orderId),
                         price=update.price,
                         qty=update.qty,
                         timestamp=update.when,
