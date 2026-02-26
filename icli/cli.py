@@ -167,17 +167,6 @@ class IBKRCmdlineApp:
         )
     )
 
-    # count total toolbar refreshes
-    updates: int = 0
-
-    # same as 'updates' except this resets to 0 if your session gets disconnected then reconnected
-    updatesReconnect: int = 0
-
-    now: whenever.ZonedDateTime = field(
-        default_factory=lambda: whenever.ZonedDateTime.now("US/Eastern")
-    )
-    nowpy: datetime.datetime = field(default_factory=lambda: datetime.datetime.now())
-
     quotesPositional: list[tuple[str, ITicker]] = field(default_factory=list)
     dispatch: cmds.Dispatch = field(default_factory=cmds.Dispatch)
 
@@ -212,9 +201,6 @@ class IBKRCmdlineApp:
     summary: dict[str, float] = field(default_factory=dict)
     pnlSingle: dict[int, PnLSingle] = field(default_factory=dict)
     exiting: bool = False
-
-    # Alternating row color for zebra-striped quote rows (themed via colorset)
-    altrowColor: str = field(init=False, default="#c0c0c0")
 
     # Console log handler (set by setupLogging, used by setConsoleLogLevel)
     _console_handler_id: int = field(init=False, default=0)
@@ -360,7 +346,7 @@ class IBKRCmdlineApp:
 
         self.toolbarStyle = Style.from_dict({"bottom-toolbar": val})
         if altrow_color:
-            self.altrowColor = altrow_color
+            self.toolbar.altrowColor = altrow_color
 
     def tradingDays(self, days):
         return tradingDaysNextN(days)
@@ -469,7 +455,17 @@ class IBKRCmdlineApp:
 
         from icli.engine.toolbar import ToolbarRenderer
 
-        self.toolbar = ToolbarRenderer(app=self)
+        self.toolbar = ToolbarRenderer(
+            clock=self.clock,
+            session=self.session,
+            ib=self.ib,
+            quotemanager=self.quotemanager,
+            quoteState=self.quoteState,
+            accountStatus=self.accountStatus,
+            localvars=self.localvars,
+            conIdCache=self.conIdCache,
+            idb=self.idb,
+        )
 
         from icli.engine.conditional import PredicateEngine
 
@@ -594,7 +590,7 @@ class IBKRCmdlineApp:
             # we accept hex colors without the '#' prefix and prepend it.
             if key.lower() == "altrow_color":
                 if val.lower() == "off":
-                    self.altrowColor = ""
+                    self.toolbar.altrowColor = ""
                     self.localvars[key] = val
                     logger.info("Alternating row color disabled")
                     return
@@ -614,7 +610,7 @@ class IBKRCmdlineApp:
                     )
                     return
 
-                self.altrowColor = color
+                self.toolbar.altrowColor = color
                 self.localvars[key] = color
                 logger.info("Alternating row color set to {}", color)
                 return
@@ -887,6 +883,22 @@ class IBKRCmdlineApp:
     @loadingCommissions.setter
     def loadingCommissions(self, value: bool) -> None:
         self.placer.loadingCommissions = value
+
+    @property
+    def altrowColor(self) -> str:
+        return self.toolbar.altrowColor
+
+    @altrowColor.setter
+    def altrowColor(self, value: str) -> None:
+        self.toolbar.altrowColor = value
+
+    @property
+    def nowpy(self) -> datetime.datetime:
+        return self.clock.nowpy
+
+    @property
+    def now(self) -> whenever.ZonedDateTime:
+        return self.clock.now
 
     def updateOrder(self, trade: Trade):
         return self.events.updateOrder(trade)
@@ -1472,11 +1484,11 @@ class IBKRCmdlineApp:
 
                 logger.info(
                     "Total Updates: {}; Updates since last connect: {}",
-                    self.updates,
-                    self.updatesReconnect,
+                    self.toolbar.updates,
+                    self.toolbar.updatesReconnect,
                 )
 
-                self.updatesReconnect = 0
+                self.toolbar.updatesReconnect = 0
 
                 try:
                     # NOTE: Client ID *MUST* be 0 to allow modification of

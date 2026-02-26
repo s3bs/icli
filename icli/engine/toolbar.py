@@ -248,18 +248,36 @@ def fmtPriceOpt(n, digits: int = 2) -> str:
 class ToolbarRenderer:
     """Renders the prompt_toolkit bottom toolbar for IBKRCmdlineApp.
 
-    All application state is accessed through the ``_app`` back-reference so
-    this class stays consistent with the pattern used by other extracted
-    modules (events.py, quotemanager.py, placement.py, etc.).
-
-    Parameters
-    ----------
-    app:
-        Back-reference to the live IBKRCmdlineApp instance.
+    Dependencies are injected at construction so this module has no direct
+    coupling to IBKRCmdlineApp.
     """
 
-    def __init__(self, app) -> None:
-        self._app = app
+    def __init__(
+        self,
+        *,
+        clock,
+        session,
+        ib,
+        quotemanager,
+        quoteState: dict,
+        accountStatus: dict,
+        localvars: dict,
+        conIdCache,
+        idb,
+    ) -> None:
+        self._clock = clock
+        self._session = session
+        self._ib = ib
+        self._quotemanager = quotemanager
+        self._quoteState = quoteState
+        self._accountStatus = accountStatus
+        self._localvars = localvars
+        self._conIdCache = conIdCache
+        self._idb = idb
+        # Owned mutable state
+        self.updates: int = 0
+        self.updatesReconnect: int = 0
+        self.altrowColor: str = "#c0c0c0"
 
     # ------------------------------------------------------------------
     # Public API
@@ -272,19 +290,23 @@ class ToolbarRenderer:
         Returns an ``HTML`` object on success, or ``HTML("No data yet...")``
         when the app has not yet received any market data.
         """
-        app = self._app
+        self.updates += 1
+        self.updatesReconnect += 1
+        tz = self._localvars.get("timezone", "US/Eastern")
+        self._clock.now = whenever.ZonedDateTime.now(tz)
+        self._clock.nowpy = self._clock.now.py_datetime()
 
-        app.updates += 1
-        app.updatesReconnect += 1
-        tz = app.localvars.get("timezone", "US/Eastern")
-        app.now = whenever.ZonedDateTime.now(tz)
-        app.nowpy = app.now.py_datetime()
+        # Local aliases for frequently accessed state
+        clock = self._clock
+        conIdCache = self._conIdCache
+        idb = self._idb
+        accountStatus = self._accountStatus
 
-        # -- Settings read from app localvars --------------------------------
-        useLast = app.localvars.get("last")
-        hideSingleLegs = app.localvars.get("hide")
-        hideMissing = app.localvars.get("hidemissing")
-        showHeaders = app.localvars.get("headers", "").lower() in ("true", "on", "1", "yes")
+        # -- Settings read from localvars --------------------------------
+        useLast = self._localvars.get("last")
+        hideSingleLegs = self._localvars.get("hide")
+        hideMissing = self._localvars.get("hidemissing")
+        showHeaders = self._localvars.get("headers", "").lower() in ("true", "on", "1", "yes")
 
         # -- Nested formatting helpers (use closure over useLast etc.) -------
 
@@ -335,7 +357,7 @@ class ToolbarRenderer:
             else:
                 try:
                     # NOTE: decimals *can* be zero, so our decimal fetcher returns None on failure to load, so None means "wait for data to populate"
-                    if (decimals := app.idb.decimals(c.contract)) is None:
+                    if (decimals := idb.decimals(c.contract)) is None:
                         return f"WAITING TO POPULATE METADATA FOR: {c.contract.localSymbol}"
 
                     # for DISPLAY purposes, don't allow one digit decimals (things like /RTY trade in $0.1 increments, but we still want to show $0.10 values)
@@ -355,7 +377,7 @@ class ToolbarRenderer:
                     try:
                         name = " :: ".join(
                             [
-                                f"{z.action:<5} {z.ratio:>3} {app.conIdCache.get(z.conId).localSymbol.replace(' ', ''):>20}"
+                                f"{z.action:<5} {z.ratio:>3} {conIdCache.get(z.conId).localSymbol.replace(' ', ''):>20}"
                                 for z in c.contract.comboLegs
                             ]
                         )
@@ -376,13 +398,13 @@ class ToolbarRenderer:
 
             if c.lastTimestamp:
                 agoLastTrade = as_duration(
-                    (app.nowpy - c.lastTimestamp).total_seconds()
+                    (clock.nowpy - c.lastTimestamp).total_seconds()
                 )
             else:
                 agoLastTrade = None
 
             if c.time:
-                ago = as_duration((app.nowpy - c.time).total_seconds())
+                ago = as_duration((clock.nowpy - c.time).total_seconds())
             else:
                 ago = "NO LIVE DATA"
 
@@ -505,11 +527,11 @@ class ToolbarRenderer:
                         sorted(
                             c.contract.comboLegs,
                             # TODO: move this to a leg-sort-lookup cache so it's less work to run every time
-                            key=lambda leg: sortLeg(leg, app.conIdCache),
+                            key=lambda leg: sortLeg(leg, conIdCache),
                         )
                     ):
                         try:
-                            contract = app.conIdCache[x.conId]
+                            contract = conIdCache[x.conId]
                         except:
                             # cache is broken for this contract id...
                             return f"[CACHE BROKEN FOR {x=} in {c.contract=}]"
@@ -790,7 +812,7 @@ class ToolbarRenderer:
                     # Note: this dynamic calendar math shows the exact time remaining even accounting for (pre-scheduled) early market close days.
                     when = (
                         fetchEndOfMarketDayAtDate(2000 + int(y), int(m), int(d))
-                        - app.now
+                        - clock.now
                     ).in_days_of_24h()
 
                     # this may be too wide for some people? works for me.
@@ -1029,7 +1051,7 @@ class ToolbarRenderer:
             rowvals: list[list[str]] = [[]]
             currentrowlen = 0
             DT = []
-            for cat, val in app.accountStatus.items():
+            for cat, val in accountStatus.items():
                 # if val == 0:
                 #    continue
 
@@ -1093,7 +1115,7 @@ class ToolbarRenderer:
             # After you trade for a while without withdraws, your profits will grow your SMA value to be larger
             # than your full 4x BuyingPower, so eventually you can hold 4x margin overnight with no liquidations.
             # (note: the SMA margin calculations are only for RegT and do not apply to portfolio margin / SPAN accounts)
-            overnightDeficit = app.accountStatus["SMA"]
+            overnightDeficit = accountStatus["SMA"]
 
             onc = ""
             if overnightDeficit < 0:
@@ -1106,18 +1128,18 @@ class ToolbarRenderer:
             # some positions have less day margin than overnight margin, and we can see the difference
             # where 'FullMaintMarginReq' is what is required after RTH closes and 'MaintMarginReq' is required for the current session.
             # Just add a visible note if our margin requirements will increase if we don't close out live positions.
-            fmm = app.accountStatus.get("FullMaintMarginReq", 0)
-            mm = app.accountStatus["MaintMarginReq"]
+            fmm = accountStatus.get("FullMaintMarginReq", 0)
+            mm = accountStatus["MaintMarginReq"]
 
             if fmm > mm:
                 onc += f" (OVERNIGHT MARGIN LARGER THAN DAY: ${fmm:,.2f} (+${fmm - mm:,.2f}))"
 
-            qs = app.quoteStateSorted
+            qs = self._quotemanager.quoteStateSorted
 
             spxbreakers = ""
 
             try:
-                spx = app.quoteState.get("SPX")
+                spx = self._quoteState.get("SPX")
                 if spx:
                     # hack around IBKR quotes being broken over weekends/holdays
                     # NOTE: this isn't valid across weekends because until Monday morning, the "close" is "Thursday close" not frday close. sigh.
@@ -1152,20 +1174,20 @@ class ToolbarRenderer:
             # TODO: we may want to iterate these to exclude "Inactive" or orders like:
             # [x.log[-1].status == "Inactive" for x in self.ib.openTrades()]
             # We could also exclude waiting bracket orders when status == 'PreSubmitted' _and_ has parentId
-            ordcount = len(app.ib.openTrades())
+            ordcount = len(self._ib.openTrades())
             openorders = f"open orders: {ordcount:,}"
 
-            positioncount = len(app.ib.portfolio())
+            positioncount = len(self._ib.portfolio())
             openpositions = f"positions: {positioncount:,}"
 
-            executioncount = len(app.ib.fills())
+            executioncount = len(self._ib.fills())
             todayexecutions = f"executions: {executioncount:,}"
 
             # TODO: We couold also flip this between a "time until market open" vs "time until close" value depending
             #       on if we are out of market hours or not, but we aren't bothering with the extra logic for now.
             untilClose = (
-                fetchEndOfMarketDayAtDate(app.now.year, app.now.month, app.now.day)
-                - app.now
+                fetchEndOfMarketDayAtDate(clock.now.year, clock.now.month, clock.now.day)
+                - clock.now
             )
             todayclose = f"mktclose: {as_duration(untilClose.in_seconds())}"
             daysInMonth = f"dim: {tradingDaysRemainingInMonth()}"
@@ -1180,7 +1202,7 @@ class ToolbarRenderer:
             # printing (if you are trading speads only and single legs are taking up most of the screen, this
             # helps save your screen space a bit).
             # We could extend this "show/hide" system to different categories or symbols in the future.
-            altrowColor = app.altrowColor
+            altrowColor = self.altrowColor
             # safety: only use color if it looks like a valid #hex to avoid
             # an infinite prompt_toolkit renderer crash loop
             if altrowColor and not (altrowColor.startswith("#") and len(altrowColor) in (4, 7)):
@@ -1212,18 +1234,18 @@ class ToolbarRenderer:
                     rows.append(row)
 
             # basically, if we've never reconnected, then only show one update count
-            if app.updates == app.updatesReconnect:
-                updatesFmt = f"[{app.updates:,}]"
+            if self.updates == self.updatesReconnect:
+                updatesFmt = f"[{self.updates:,}]"
             else:
                 # else, the total CLI refresh count has diverged from the same-session reconnect count, so show both.
                 # (why is this useful? our internal _data_ resets on a reconnect, so all our client-side moving averages, etc, go back
                 #  to baseline with no history after a reconnect (because we don't know how long we were disconnected for technically),
                 #  so having a "double count" can help show users to wait a little longer for the client-side derived metrics to catch up again).
-                updatesFmt = f"[{app.updates:,}; {app.updatesReconnect:,}]"
+                updatesFmt = f"[{self.updates:,}; {self.updatesReconnect:,}]"
 
             return HTML(
                 # all these spaces look weird, but they (kinda) match the underlying column-based formatting offsets
-                f"""[{app.clientId}] {app.nowpy.strftime('%Y-%m-%d %H:%M:%S %Z'):<28}{onc} {updatesFmt}          {spxbreakers}          {openorders}    {openpositions}    {todayexecutions}      {todayclose}   ({daysInMonth} :: {daysInYear})\n"""
+                f"""[{self._session.clientId}] {clock.nowpy.strftime('%Y-%m-%d %H:%M:%S %Z'):<28}{onc} {updatesFmt}          {spxbreakers}          {openorders}    {openpositions}    {todayexecutions}      {todayclose}   ({daysInMonth} :: {daysInYear})\n"""
                 + "\n".join(rows)
                 + "\n"
                 + balrows

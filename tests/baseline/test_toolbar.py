@@ -109,20 +109,28 @@ class TestFmtPriceOpt:
 # ---------------------------------------------------------------------------
 
 
+def _make_toolbar_renderer(accountStatus=None, quoteState=None, localvars=None, clientId=0, **kw):
+    """Build a ToolbarRenderer with minimal mock dependencies."""
+    from icli.engine.clock import AppClock
+    from icli.engine.session import SessionConfig
+
+    return ToolbarRenderer(
+        clock=kw.get("clock", AppClock()),
+        session=kw.get("session", SessionConfig(clientId=clientId)),
+        ib=kw.get("ib", MagicMock()),
+        quotemanager=kw.get("quotemanager", MagicMock(quoteStateSorted=[])),
+        quoteState=quoteState if quoteState is not None else {},
+        accountStatus=accountStatus if accountStatus is not None else {},
+        localvars=localvars if localvars is not None else {},
+        conIdCache=kw.get("conIdCache", {}),
+        idb=kw.get("idb", MagicMock()),
+    )
+
+
 class TestToolbarRendererRender:
     def _make_renderer(self):
-        """Build a ToolbarRenderer backed by a minimal mock app."""
-        mock_app = MagicMock()
-        # Attributes that render() increments / assigns
-        mock_app.updates = 0
-        mock_app.updatesReconnect = 0
-        mock_app.localvars = {}
-
-        # accountStatus must have required keys — raise KeyError to trigger except
-        # (simulating "no data yet" by making accountStatus access fail)
-        mock_app.accountStatus = {}  # "SMA" key missing → KeyError
-
-        return ToolbarRenderer(app=mock_app)
+        """Build a ToolbarRenderer backed by minimal mocks (no data → except path)."""
+        return _make_toolbar_renderer(accountStatus={})
 
     def test_render_returns_html_object(self):
         from prompt_toolkit.formatted_text import HTML
@@ -140,24 +148,20 @@ class TestToolbarRendererRender:
         """render() completes the try block when all required account keys exist."""
         from prompt_toolkit.formatted_text import HTML
 
-        mock_app = MagicMock()
-        mock_app.updates = 0
-        mock_app.updatesReconnect = 0
-        mock_app.localvars = {}
-        mock_app.accountStatus = {
-            "SMA": 10000.0,
-            "MaintMarginReq": 5000.0,
-            "AvailableFunds": 50000.0,
-        }
-        # quoteStateSorted returns an empty iterable (no quotes)
-        mock_app.quoteStateSorted = []
-        mock_app.quoteState = {}
-        mock_app.ib.openTrades.return_value = []
-        mock_app.ib.portfolio.return_value = []
-        mock_app.ib.fills.return_value = []
-        mock_app.clientId = 1
+        ib = MagicMock()
+        ib.openTrades.return_value = []
+        ib.portfolio.return_value = []
+        ib.fills.return_value = []
 
-        renderer = ToolbarRenderer(app=mock_app)
+        renderer = _make_toolbar_renderer(
+            accountStatus={
+                "SMA": 10000.0,
+                "MaintMarginReq": 5000.0,
+                "AvailableFunds": 50000.0,
+            },
+            clientId=1,
+            ib=ib,
+        )
         result = renderer.render()
         assert isinstance(result, HTML)
         # With all required data present, should NOT return "No data yet..."
@@ -167,21 +171,20 @@ class TestToolbarRendererRender:
         """When no quotes but account data is populated, clientId appears in output."""
         from prompt_toolkit.formatted_text import HTML
 
-        mock_app = MagicMock()
-        mock_app.updates = 5
-        mock_app.updatesReconnect = 5
-        mock_app.localvars = {}
-        mock_app.accountStatus = {
-            "SMA": 0.0,
-            "MaintMarginReq": 0.0,
-        }
-        mock_app.quoteStateSorted = []
-        mock_app.quoteState = {}
-        mock_app.ib.openTrades.return_value = []
-        mock_app.ib.portfolio.return_value = []
-        mock_app.ib.fills.return_value = []
-        mock_app.clientId = 42
+        ib = MagicMock()
+        ib.openTrades.return_value = []
+        ib.portfolio.return_value = []
+        ib.fills.return_value = []
 
-        renderer = ToolbarRenderer(app=mock_app)
+        renderer = _make_toolbar_renderer(
+            accountStatus={
+                "SMA": 0.0,
+                "MaintMarginReq": 0.0,
+            },
+            clientId=42,
+            ib=ib,
+        )
+        renderer.updates = 5
+        renderer.updatesReconnect = 5
         result = renderer.render()
         assert "42" in str(result)
