@@ -109,57 +109,7 @@ ICLI_DUMP_QUOTES = bool(int(os.getenv("ICLI_DUMP_QUOTES", 0)))
 from icli.engine.events import LIVE_ACCOUNT_STATUS, STATUS_FIELDS_PROCESS
 
 
-stocks = ["QQQ", "SPY", "AAPL"]
-
-# Futures to exchange mappings:
-# https://www.interactivebrokers.com/en/index.php?f=26662
-# Note: Use ES and RTY and YM for quotes because higher volume
-#       also curiously, MNQ has more volume than NQ?
-# Volumes at: https://www.cmegroup.com/trading/equity-index/us-index.html
-# ES :: MES
-# RTY :: M2K
-# YM :: MYM
-# NQ :: MNQ
-sfutures = {
-    "CME": ["ES", "RTY", "MNQ", "GBP"],  # "HE"],
-    "CBOT": ["YM"],  # , "TN", "ZF"],
-    #    "NYMEX": ["GC", "QM"],
-}
-
-# Discovered via mainly: https://www.linnsoft.com/support/symbol-guide-ib
-# The DJI / DOW / INDU quotes don't work.
-# The NDX / COMP quotes require differen't data not included in default packages.
-#    Index("COMP", "NASDAQ"),
-idxs = [
-    Index("SPX", "CBOE"),
-    # No NANOS because most brokers don't offer it and it has basically no volume
-    # Index("NANOS", "CBOE"),  # SPY-priced index options with no multiplier
-    Index("VIN", "CBOE"),  # VIX Front-Month Component (near term)
-    Index("VIF", "CBOE"),  # VIX Front-er-Month Component (far term)
-    Index("VIX", "CBOE"),  # VIX Currently (a mix of VIN and VIF basically)
-    # No VOL-NYSE because it displays billions of shares and breaks our views
-    # Index("VOL-NYSE", "NYSE"),
-    Index("TICK-NYSE", "NYSE"),
-    # > 1 == selling pressure, < 1 == buying pressure; somewhat
-    Index("TRIN-NYSE", "NYSE"),
-    # Advancing minus Declining (bid is Advance, ask is Decline) (no idea what the bid/ask qtys represent)
-    Index("AD-NYSE", "NYSE"),
-]
-
-# Note: ContFuture is only for historical data; it can't quote or trade.
-# So, all trades must use a manual contract month (quarterly)
-# TODO: we should be consuming a better expiration date system because some
-#       futures expire end-of-month (interest rates), others quarterly (indexes), etc.
-futures = [
-    Future(
-        symbol=sym,
-        lastTradeDateOrContractMonth=FUT_EXP or "",
-        exchange=x,
-        currency="USD",
-    )
-    for x, syms in sfutures.items()
-    for sym in syms
-]
+from icli.engine.defaults import default_contracts
 
 
 # Common timezone abbreviations -> IANA names for the 'set timezone' command
@@ -1651,11 +1601,7 @@ class IBKRCmdlineApp:
             #  was from before we had per-client saved quote states)).
             # TODO: make this a callable command to "Restore defaults" if we ended up with a busted quote state.
             if not loadedClientDefaultQuotes:
-                contracts: list[Stock | Future | Index] = [
-                    Stock(sym, "SMART", "USD") for sym in stocks
-                ]
-                contracts += futures
-                contracts += idxs
+                contracts = default_contracts()
 
                 with Timer("[quotes :: global] Restored quote state"):
                     # run restore and local contracts qualification concurrently
