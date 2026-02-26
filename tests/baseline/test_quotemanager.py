@@ -23,7 +23,6 @@ def make_quotemanager(quotes=None):
     conIdCache = {}
     idb = MagicMock()
     ol = MagicMock()
-    app = MagicMock()
 
     return QuoteManager(
         ib=ib,
@@ -33,7 +32,10 @@ def make_quotemanager(quotes=None):
         conIdCache=conIdCache,
         idb=idb,
         ol=ol,
-        app=app,
+        qualifier=MagicMock(),
+        portfolio=MagicMock(),
+        clock=MagicMock(),
+        iticker_state=MagicMock(),
     )
 
 

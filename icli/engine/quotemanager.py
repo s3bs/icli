@@ -41,9 +41,14 @@ class QuoteManager:
         Instrument database (used for roundOrNothing and load).
     ol:
         buylang.OrderLanguage parser.
-    app:
-        Back-reference to IBKRCmdlineApp for cross-component calls
-        (qualify, bagForSpread, contractForOrderRequest, decimals).
+    qualifier:
+        ContractQualification protocol for qualify/bagForSpread/contractForOrderRequest.
+    portfolio:
+        PortfolioAccess protocol for decimals.
+    clock:
+        AppClock for coordinated time.
+    iticker_state:
+        State object passed to ITicker constructor (provides nameForContract, task_create, speak).
     """
 
     def __init__(
@@ -55,7 +60,11 @@ class QuoteManager:
         conIdCache,
         idb,
         ol,
-        app=None,
+        *,
+        qualifier,
+        portfolio,
+        clock,
+        iticker_state,
     ):
         self.ib = ib
         self.quoteState = quoteState
@@ -64,7 +73,10 @@ class QuoteManager:
         self.conIdCache = conIdCache
         self.idb = idb
         self.ol = ol
-        self._app = app  # back-reference for cross-component calls (qualify, bagForSpread, etc.)
+        self._qualifier = qualifier
+        self._portfolio = portfolio
+        self._clock = clock
+        self._iticker_state = iticker_state
 
     # ------------------------------------------------------------------
     # Positional resolution
@@ -134,7 +146,7 @@ class QuoteManager:
                 logger.error("Contract creation failed: {}", str(e))
                 return None, None
 
-            (contract,) = await self._app.qualify(contract)
+            (contract,) = await self._qualifier.qualify(contract)
             assert contract and contract.conId
 
             return sym, contract
@@ -171,7 +183,7 @@ class QuoteManager:
                 if isinstance(contract, Bag):
                     # Look up all legs of this spread/bag
                     legs = contract.comboLegs
-                    contracts = await self._app.qualify(
+                    contracts = await self._qualifier.qualify(
                         *[Contract(conId=leg.conId) for leg in legs]
                     )
 
@@ -197,7 +209,7 @@ class QuoteManager:
         logger.info("Using add request: {}", sym)
         orderReq = self.ol.parse(sym)
 
-        return sym, await self._app.bagForSpread(orderReq)
+        return sym, await self._qualifier.bagForSpread(orderReq)
 
     # ------------------------------------------------------------------
     # Quote subscription
@@ -240,7 +252,7 @@ class QuoteManager:
             # logger.info("[{}] Adding new live quote: {}", symkey, contract)
             from icli.helpers import ITicker
             ticker = self.ib.reqMktData(contract, tickFields)
-            self.quoteState[symkey] = ITicker(ticker, self._app)
+            self.quoteState[symkey] = ITicker(ticker, self._iticker_state)
 
             # Note: IBKR uses the same 'contract id' for all bags, so this is invalid for bags...
             self.contractIdsToQuoteKeysMappings[contract.conId] = symkey
@@ -291,7 +303,7 @@ class QuoteManager:
         # technically not necessary for quotes, but we want the contract
         # to have the full '.localSymbol' designation for printing later.
         cs: list[Contract | None] = await asyncio.gather(
-            *[self._app.contractForOrderRequest(o) for o in ors]
+            *[self._qualifier.contractForOrderRequest(o) for o in ors]
         )
 
         # logger.info("Resolved contracts: {}", cs)
@@ -358,7 +370,7 @@ class QuoteManager:
         # only optionally print the quote because printing technically requires extra time
         # for all the formatting and display output
         if show and hasQuotes:
-            nowpy = self._app.nowpy
+            nowpy = self._clock.nowpy
             ago = (
                 "now"
                 if q.time >= nowpy
@@ -374,7 +386,7 @@ class QuoteManager:
             else:
                 agoLastTrade = "never received"
 
-            digits = self._app.decimals(q.contract)
+            digits = self._portfolio.decimals(q.contract)
 
             assert current.bid is not None or current.ask is not None
 

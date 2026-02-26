@@ -292,6 +292,7 @@ class IBKRCmdlineApp:
 
     # Shared engine infrastructure (initialized in __post_init__)
     session: Any = field(init=False)
+    clock: Any = field(init=False)
 
     # Engine modules (initialized in __post_init__ via lazy imports)
     portfolio: Any = field(init=False)
@@ -414,6 +415,10 @@ class IBKRCmdlineApp:
 
         from icli.engine.quotemanager import QuoteManager
 
+        from icli.engine.clock import AppClock
+
+        self.clock = AppClock()
+
         self.quotemanager = QuoteManager(
             self.ib,
             self.quoteState,
@@ -422,7 +427,10 @@ class IBKRCmdlineApp:
             self.conIdCache,
             self.idb,
             self.ol,
-            app=self,
+            qualifier=self.qualifier,
+            portfolio=self.portfolio,
+            clock=self.clock,
+            iticker_state=self,
         )
 
         from icli.engine.events import IBEventRouter
