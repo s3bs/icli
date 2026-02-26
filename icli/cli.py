@@ -290,6 +290,9 @@ class IBKRCmdlineApp:
 
     opstate: Any = field(init=False)
 
+    # Shared engine infrastructure (initialized in __post_init__)
+    session: Any = field(init=False)
+
     # Engine modules (initialized in __post_init__ via lazy imports)
     portfolio: Any = field(init=False)
     qualifier: Any = field(init=False)
@@ -392,9 +395,18 @@ class IBKRCmdlineApp:
         # provide ourself to instrumentdb so it can also use live API calls
         self.idb = instrumentdb.IInstrumentDatabase(self)
 
+        from icli.engine.session import SessionConfig
+
+        self.session = SessionConfig(
+            accountId=self.accountId,
+            clientId=self.clientId,
+            connected=self.connected,
+            isSandbox=self.isSandbox,
+        )
+
         from icli.engine.portfolio import PortfolioQueries
 
-        self.portfolio = PortfolioQueries(self.ib, self, self.conIdCache, self.idb)
+        self.portfolio = PortfolioQueries(self.ib, self.session, self.conIdCache, self.idb)
 
         from icli.engine.qualification import ContractQualifier
 
@@ -1284,6 +1296,7 @@ class IBKRCmdlineApp:
 
         if len(accounts) == 1:
             self.accountId = accounts[0]
+            self.session.accountId = self.accountId
             logger.info("Auto-selected account: {}", self.accountId)
         else:
             import questionary
@@ -1296,6 +1309,7 @@ class IBKRCmdlineApp:
                 logger.error("No account selected. Exiting.")
                 sys.exit(1)
             self.accountId = chosen
+            self.session.accountId = self.accountId
             logger.info("Selected account: {}", self.accountId)
 
     async def prepare(self):
@@ -1427,6 +1441,7 @@ class IBKRCmdlineApp:
             logger.info("Connecting to IBKR API...")
             while True:
                 self.connected = False
+                self.session.connected = False
 
                 logger.info(
                     "Total Updates: {}; Updates since last connect: {}",
@@ -1466,6 +1481,7 @@ class IBKRCmdlineApp:
                     )
 
                     self.connected = True
+                    self.session.connected = True
 
                     # Resolve account ID from gateway if not provided at startup.
                     # On reconnects self.accountId is already set, so this is a no-op.
