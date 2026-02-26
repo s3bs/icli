@@ -68,6 +68,9 @@ from icli.engine.technicals import ATR, ATRLive, TWEMA
 from icli.engine.orders import IOrder, CLIOrderType
 from icli.engine.exchanges import FUTS_EXCHANGE, FutureSymbol
 from icli.engine.audio import AwwdioClient
+from icli.engine.clock import AppClock
+from icli.engine.session import SessionConfig
+from icli.engine.protocols import ContractQualification, PortfolioAccess, QuoteAccess
 
 __all__ = [
     "ATR",
@@ -78,4 +81,9 @@ __all__ = [
     "FUTS_EXCHANGE",
     "FutureSymbol",
     "AwwdioClient",
+    "AppClock",
+    "SessionConfig",
+    "ContractQualification",
+    "PortfolioAccess",
+    "QuoteAccess",
 ]
