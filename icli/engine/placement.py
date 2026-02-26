@@ -54,15 +54,31 @@ from ib_async import FuturesOption, Option, Crypto  # type: ignore[attr-defined]
 class OrderPlacer:
     """Handles order placement, pricing, and tick compliance for IBKR orders.
 
-    Uses a back-reference to the parent app (IBKRCmdlineApp) for cross-component
-    calls that cannot be cleanly moved here without pulling in too many dependencies.
+    Dependencies are injected at construction so this module has no direct
+    coupling to IBKRCmdlineApp.
     """
 
-    def __init__(self, ib, conIdCache, idb, app=None):
+    def __init__(
+        self,
+        ib,
+        conIdCache,
+        idb,
+        *,
+        qualifier,
+        portfolio,
+        quotes,
+        quoteState: dict,
+        accountStatus: dict,
+    ):
         self.ib = ib
         self.conIdCache = conIdCache
         self.idb = idb
-        self._app = app  # back-reference for cross-component calls
+        self._qualifier = qualifier
+        self._portfolio = portfolio
+        self._quotes = quotes
+        self._quoteState = quoteState
+        self._accountStatus = accountStatus
+        self.loadingCommissions: bool = False
 
     # ------------------------------------------------------------------
     # Tick compliance / rounding
@@ -343,7 +359,7 @@ class OrderPlacer:
         if qty.is_quantity and not limit:
             logger.info("[{}] Request to order qty {} at current prices", sym, qty)
         else:
-            digits = self._app.decimals(contract) or 2
+            digits = self._portfolio.decimals(contract) or 2
             logger.info(
                 "[{}] Request to order at dynamic qty {} @ price {:,.{}f}",
                 sym,
@@ -355,7 +371,7 @@ class OrderPlacer:
         quotesym = sym
 
         # if quote isn't live, add it so we can check against bid/ask details
-        self._app.addQuoteFromContract(contract)
+        self._quotes.addQuoteFromContract(contract)
 
         if not contract.conId:
             # spead contracts don't have IDs, so only reject if NOT a spread here.
@@ -369,13 +385,13 @@ class OrderPlacer:
 
         if isinstance(contract, Bag):
             # steal multiplier of first thing in contract. we assume it's okay? This would be wrong for buy-write bags and is only valid for spreads.
-            (innerContract,) = await self._app.qualify(
+            (innerContract,) = await self._qualifier.qualify(
                 Contract(conId=contract.comboLegs[0].conId)
             )
         else:
             innerContract = contract
 
-        multiplier = self._app.multiplier(contract)
+        multiplier = self._portfolio.multiplier(contract)
 
         # REL and LMT/MKT/MOO/MOC orders can be outside RTH, but futures trade without RTH designation all the time
         # Futures have no "RTH" so they always execute if markets are open.
@@ -458,7 +474,7 @@ class OrderPlacer:
 
             # only show this quote loop if: LIVE REQUEST or REQUESTING DYNAMIC LIMIT PRICE
             while not (
-                currentQuote := self._app.currentQuote(
+                currentQuote := self._quotes.currentQuote(
                     quoteKey, show=(not (preview or limit))
                 )
             ):
@@ -549,7 +565,7 @@ class OrderPlacer:
             logger.info("[{}] Trying to order ${:,.2f} worth at {}...", sym, amt, qty)
 
             assert limit is not None
-            determinedQty = self._app.quantityForAmount(contract, amt, limit)
+            determinedQty = self._portfolio.quantityForAmount(contract, amt, limit)
 
             if not determinedQty:
                 logger.error(
@@ -580,7 +596,7 @@ class OrderPlacer:
             sideClose: BuySell = "SELL" if isLong else "BUY"
 
             # add instrument-specific digits only to price data (not qty or multipler data)
-            digits = self._app.decimals(contract) or 2
+            digits = self._portfolio.decimals(contract) or 2
             logger.info(
                 "[{} :: {}] {:,.2f} @ ${:,.{}f} x {:,.0f} ({}) ALL_HOURS={} TIF={}",
                 orderType,
@@ -770,12 +786,12 @@ class OrderPlacer:
         # placeOrder() returns a "live updating" Trade object with live position execution detail updates
 
         if isinstance(contract, Bag):
-            await self._app.addNonGuaranteeTagsIfRequired(
+            await self._qualifier.addNonGuaranteeTagsIfRequired(
                 contract, order, profitOrder, lossOrder
             )
 
         trade = self.ib.placeOrder(
-            await self._app.contractForOrderSide(order, contract), order
+            await self._qualifier.contractForOrderSide(order, contract), order
         )
 
         limitRecord = TradeOrder(trade, order)
@@ -784,7 +800,7 @@ class OrderPlacer:
         profitRecord = None
         if profitOrder:
             profitTrade = self.ib.placeOrder(
-                await self._app.contractForOrderSide(profitOrder, contract), profitOrder
+                await self._qualifier.contractForOrderSide(profitOrder, contract), profitOrder
             )
 
             profitRecord = TradeOrder(profitTrade, profitOrder)
@@ -793,7 +809,7 @@ class OrderPlacer:
         lossRecord = None
         if lossOrder:
             lossTrade = self.ib.placeOrder(
-                await self._app.contractForOrderSide(lossOrder, contract), lossOrder
+                await self._qualifier.contractForOrderSide(lossOrder, contract), lossOrder
             )
 
             lossRecord = TradeOrder(lossTrade, lossOrder)
@@ -874,7 +890,7 @@ class OrderPlacer:
             return o
 
         if isinstance(contract, Bag):
-            await self._app.addNonGuaranteeTagsIfRequired(contract, *[o[1] for o in orders])
+            await self._qualifier.addNonGuaranteeTagsIfRequired(contract, *[o[1] for o in orders])
 
         try:
             # if this is a multi-order bracket, run all the whatIf requests concurrently (a 2x-3x speedup over sequential operations)
@@ -941,7 +957,7 @@ class OrderPlacer:
         margPctInit = 100.0
         margPctMaint = 100.0
 
-        digits = self._app.decimals(contract)
+        digits = self._portfolio.decimals(contract)
 
         # fix up math issues if totalQuantity became a Decimal() along the way
         order.totalQuantity = float(order.totalQuantity)
@@ -1047,7 +1063,7 @@ class OrderPlacer:
         symkey = lookupKey(contract)
         highCommission = status.maxCommission or status.commission
 
-        if highCommission and (ticker := self._app.quoteState.get(symkey)):
+        if highCommission and (ticker := self._quoteState.get(symkey)):
             if ticker.modelGreeks and abs(ticker.modelGreeks.delta) < 1:
                 for amt in (1, 3, 9):
                     # NOTE: we report both the value move and the exit-at profit AFTER COMISSIONS assuming the 'highComission' commission is 2x (open+close)
@@ -1171,7 +1187,7 @@ class OrderPlacer:
 
         # TODO: make this delta range configurable? config file? env? global setting?
         if isinstance(contract, (Option, FuturesOption)):
-            mg = self._app.quoteState[symname].modelGreeks
+            mg = self._quoteState[symname].modelGreeks
             if mg:
                 delta = mg.delta
                 if not delta:
@@ -1281,7 +1297,7 @@ class OrderPlacer:
                     fmtmoney(status.equityWithLoanAfter - status.maintMarginAfter),
                 )
 
-                fundsDiff = (risk / self._app.accountStatus["AvailableFunds"]) * 100
+                fundsDiff = (risk / self._accountStatus["AvailableFunds"]) * 100
 
                 if fundsDiff < 0:
                     # your account value is GROWING, this is a funds increase
@@ -1382,7 +1398,7 @@ class OrderPlacer:
         logger.info("Fetching full execution history...")
         try:
             # manually flag "we are loading historical commissions, so don't run the event handler"
-            self._app.loadingCommissions = True
+            self.loadingCommissions = True
 
             with Timer("Fetched execution history"):
                 try:
@@ -1391,4 +1407,4 @@ class OrderPlacer:
                     logger.error("Executions failed to load before the timeout period.")
         finally:
             # allow the commission report event handler to run again
-            self._app.loadingCommissions = False
+            self.loadingCommissions = False

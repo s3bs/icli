@@ -282,7 +282,6 @@ class IBKRCmdlineApp:
 
     connected: bool = False
     disableClientQuoteSnapshotting: bool = False
-    loadingCommissions: bool = False
 
     toolbarStyle: Style = field(
         default_factory=lambda: Style.from_dict({"bottom-toolbar": "fg:default bg:default"})
@@ -454,7 +453,16 @@ class IBKRCmdlineApp:
 
         from icli.engine.placement import OrderPlacer
 
-        self.placer = OrderPlacer(self.ib, self.conIdCache, self.idb, app=self)
+        self.placer = OrderPlacer(
+            self.ib,
+            self.conIdCache,
+            self.idb,
+            qualifier=self.qualifier,
+            portfolio=self.portfolio,
+            quotes=self.quotemanager,
+            quoteState=self.quoteState,
+            accountStatus=self.accountStatus,
+        )
 
         from icli.engine.toolbar import ToolbarRenderer
 
@@ -868,6 +876,14 @@ class IBKRCmdlineApp:
 
     async def loadExecutions(self) -> None:
         return await self.placer.loadExecutions()
+
+    @property
+    def loadingCommissions(self) -> bool:
+        return self.placer.loadingCommissions
+
+    @loadingCommissions.setter
+    def loadingCommissions(self, value: bool) -> None:
+        self.placer.loadingCommissions = value
 
     def updateOrder(self, trade: Trade):
         return self.events.updateOrder(trade)

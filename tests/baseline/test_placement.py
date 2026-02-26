@@ -19,14 +19,22 @@ def make_placer(**overrides):
         ib=MagicMock(),
         conIdCache={},
         idb=MagicMock(),
-        app=MagicMock(),
+        qualifier=MagicMock(),
+        portfolio=MagicMock(),
+        quotes=MagicMock(),
+        quoteState={},
+        accountStatus={"AvailableFunds": 100_000.0},
     )
     defaults.update(overrides)
     return OrderPlacer(
         ib=defaults["ib"],
         conIdCache=defaults["conIdCache"],
         idb=defaults["idb"],
-        app=defaults["app"],
+        qualifier=defaults["qualifier"],
+        portfolio=defaults["portfolio"],
+        quotes=defaults["quotes"],
+        quoteState=defaults["quoteState"],
+        accountStatus=defaults["accountStatus"],
     )
 
 
