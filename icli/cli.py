@@ -106,45 +106,7 @@ pp.install_extras(["dataclasses"], warn_on_error=False)
 ICLI_DUMP_QUOTES = bool(int(os.getenv("ICLI_DUMP_QUOTES", 0)))
 
 
-# Fields updated live for toolbar printing.
-# Printed in the order of this list (the order the dict is created)
-# Some math and definitions for values:
-# https://www.interactivebrokers.com/en/software/tws/usersguidebook/realtimeactivitymonitoring/available_for_trading.htm
-# https://ibkr.info/node/1445
-LIVE_ACCOUNT_STATUS: Final = [
-    # row 1
-    "AvailableFunds",
-    # NOTE: we replaced "BuyingPower" with a 3-way breakdown instead:
-    "BuyingPower4",
-    "BuyingPower3",
-    "BuyingPower2",
-    "Cushion",
-    "DailyPnL",
-    "DayTradesRemaining",
-    "DayTradesRemainingT+1",
-    "DayTradesRemainingT+2",
-    "DayTradesRemainingT+3",
-    "DayTradesRemainingT+4",
-    # row 2
-    "ExcessLiquidity",
-    "FuturesPNL",
-    "GrossPositionValue",
-    "MaintMarginReq",
-    "OptionMarketValue",
-    "EquityWithLoanValue",
-    # row 3
-    "NetLiquidation",
-    "RealizedPnL",
-    "TotalCashValue",
-    "UnrealizedPnL",
-    "SMA",
-    # unpopulated:
-    #    "Leverage",
-    #    "HighestSeverity",
-]
-
-# we need to add extra keys for VERIFICATION, but we don't show these extra keys directly in the status bar...
-STATUS_FIELDS_PROCESS: Final = set(LIVE_ACCOUNT_STATUS) | {"BuyingPower"}
+from icli.engine.events import LIVE_ACCOUNT_STATUS, STATUS_FIELDS_PROCESS
 
 
 stocks = ["QQQ", "SPY", "AAPL"]

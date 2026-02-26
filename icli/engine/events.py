@@ -26,14 +26,14 @@ if TYPE_CHECKING:
     from tradeapis.ordermgr import Trade as OrderMgrTrade
 
 
-# STATUS_FIELDS_PROCESS is defined in cli.py as a module-level constant that we need here.
-# We re-import the value by accessing it through the app reference, but for the set membership
-# tests in updateSummary we need the actual set.  We inline the same derivation here so this
-# module remains self-contained and testable without importing cli.py.
-
-# Fields updated live for toolbar printing (mirrors cli.py LIVE_ACCOUNT_STATUS / STATUS_FIELDS_PROCESS).
-_LIVE_ACCOUNT_STATUS: Final = [
+# Printed in the order of this list (the order the dict is created)
+# Some math and definitions for values:
+# https://www.interactivebrokers.com/en/software/tws/usersguidebook/realtimeactivitymonitoring/available_for_trading.htm
+# https://ibkr.info/node/1445
+LIVE_ACCOUNT_STATUS: Final = [
+    # row 1
     "AvailableFunds",
+    # NOTE: we replaced "BuyingPower" with a 3-way breakdown instead:
     "BuyingPower4",
     "BuyingPower3",
     "BuyingPower2",
@@ -44,20 +44,26 @@ _LIVE_ACCOUNT_STATUS: Final = [
     "DayTradesRemainingT+2",
     "DayTradesRemainingT+3",
     "DayTradesRemainingT+4",
+    # row 2
     "ExcessLiquidity",
     "FuturesPNL",
     "GrossPositionValue",
     "MaintMarginReq",
     "OptionMarketValue",
     "EquityWithLoanValue",
+    # row 3
     "NetLiquidation",
     "RealizedPnL",
     "TotalCashValue",
     "UnrealizedPnL",
     "SMA",
+    # unpopulated:
+    #    "Leverage",
+    #    "HighestSeverity",
 ]
 
-STATUS_FIELDS_PROCESS: Final = set(_LIVE_ACCOUNT_STATUS) | {"BuyingPower"}
+# we need to add extra keys for VERIFICATION, but we don't show these extra keys directly in the status bar...
+STATUS_FIELDS_PROCESS: Final = set(LIVE_ACCOUNT_STATUS) | {"BuyingPower"}
 
 
 class IBEventRouter:
