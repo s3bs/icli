@@ -3,9 +3,13 @@
 Category: Live Market Quotes
 """
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+import asyncio
+import math
 
+from dataclasses import dataclass, field
+
+import pandas as pd
+from ib_async import Stock, Index
 from loguru import logger
 from mutil.dispatch import DArg
 from mutil.frame import printFrame
@@ -13,17 +17,59 @@ from mutil.frame import printFrame
 from icli.cmds.base import IOp, command
 from icli.engine.contracts import contractForName, tickFieldsForContract
 
-if TYPE_CHECKING:
-    pass
-import asyncio
 
-import pandas as pd
+def is_ticker_ready(ticker, contract) -> tuple[bool, str]:
+    """Check if a ticker has sufficient data for its contract type.
+
+    Uses NaN-aware checks — ib_async initializes all numeric Ticker fields
+    to float('nan'), and bool(nan) is True, so we must use hasBidAsk() or
+    math.isnan() rather than truthiness.
+
+    Returns:
+        (is_ready, status_message)
+    """
+    has_bid_ask = ticker.hasBidAsk()
+
+    if isinstance(contract, Stock):
+        # Stocks get ticks 104 (histVol), 106 (impliedVol), 236 (shortable)
+        # from tickFieldsForContract. Wait for all of them.
+        missing = []
+        if not has_bid_ask:
+            missing.append("bid/ask")
+        if math.isnan(ticker.impliedVolatility):
+            missing.append("impliedVolatility")
+        if math.isnan(ticker.histVolatility):
+            missing.append("histVolatility")
+        if math.isnan(ticker.shortable):
+            missing.append("shortable")
+
+        if missing:
+            return (False, f"missing: {', '.join(missing)}")
+        return (True, "ready")
+
+    elif isinstance(contract, Index):
+        # Indexes: prefer bid/ask (VIX/VIN/VIF have CBOE-published bid/ask).
+        # Fallback: calculation indexes (TICK-NYSE, ADD-NYSE) may only have
+        # a computed last or close value with no tradeable bid/ask.
+        if has_bid_ask:
+            return (True, "ready")
+        if not math.isnan(ticker.last) or not math.isnan(ticker.close):
+            return (True, "ready (last/close only)")
+        return (False, "waiting for data")
+
+    else:
+        # Futures, Options, FuturesOptions, Forex, Crypto, CFD, Bond,
+        # Warrant, Bag — bid/ask is sufficient. Volatility ticks are not
+        # requested for these types and will never arrive.
+        if has_bid_ask:
+            return (True, "ready")
+        return (False, "waiting for bid/ask")
 
 
 @command(names=["qquote"])
 @dataclass
 class IOpQQuote(IOp):
-    """Quick Quote: Run a temporary quote request then print results when volatility is populated."""
+    """Quick Quote: Run a temporary quote request then print results when data arrives."""
 
     symbols: list[str] = field(init=False)
 
@@ -65,30 +111,39 @@ class IOpQQuote(IOp):
 
         ATTEMPT_LIMIT = 10
         for i in range(ATTEMPT_LIMIT):
-            ivhv = [
-                all(
-                    [
-                        t.impliedVolatility,
-                        t.histVolatility,
-                        t.shortable,
-                        t.shortableShares,
-                    ]
-                )
-                for t in tickers
+            statuses = [
+                is_ticker_ready(ticker, contract)
+                for ticker, contract in zip(tickers, contracts)
             ]
 
-            # if any iv/hv are all populated, we have the data we want.
-            if all(ivhv):
+            if all(is_ready for is_ready, _ in statuses):
                 break
 
+            pending_info = [
+                f"{contract.symbol} ({contract.secType}): {status_msg}"
+                for contract, (is_ready, status_msg) in zip(contracts, statuses)
+                if not is_ready
+            ]
+
             logger.warning(
-                "Waiting for data to arrive... (attempt {} of {})",
+                "Waiting for data to arrive... (attempt {} of {})\n  Pending: {}",
                 i,
                 ATTEMPT_LIMIT,
+                " | ".join(pending_info),
             )
             await asyncio.sleep(1.33)
         else:
-            logger.error("All data didn't arrive. Reporting partial results.")
+            incomplete = [
+                (contract.symbol, contract.secType)
+                for contract, (is_ready, _) in zip(contracts, statuses)
+                if not is_ready
+            ]
+            logger.warning(
+                "Partial data for {} contract(s) after {} attempts: {}",
+                len(incomplete),
+                ATTEMPT_LIMIT,
+                ", ".join([f"{sym} ({typ})" for sym, typ in incomplete]),
+            )
 
         # logger.info("Got tickers: {}", pp.pformat(tickers))
 
